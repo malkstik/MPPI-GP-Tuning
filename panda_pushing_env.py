@@ -48,10 +48,14 @@ class PandaPushingEnv(gym.Env):
         self.objectUid = None  # Pushing object
         self.targetUid = None  # Target object
         self.obstacleUid = None  # Obstacle object
+        self.mazeUid = None # Maze
+
 
         self.object_file_path = os.path.join(assets_dir, "objects/cube/cube.urdf")
         self.target_file_path = os.path.join(assets_dir, "objects/cube/cube.urdf")
         self.obstacle_file_path = os.path.join(assets_dir, "objects/obstacle/obstacle.urdf")
+        self.maze_file_path = os.path.join(assets_dir, "objects/maze/robot.urdf")
+
 
         # self.init_panda_joint_state = [-0.028, 0.853, -0.016, -1.547, 0.017, 2.4, 2.305, 0., 0.]
         self.init_panda_joint_state = np.array([0., 0., 0., -np.pi * 0.5, 0., np.pi * 0.5, 0.])
@@ -126,8 +130,11 @@ class PandaPushingEnv(gym.Env):
         # p.changeDynamics(self.objectUid, -1, 2)
         self.targetUid = p.loadURDF(self.target_file_path, basePosition=self.object_target_pose[:3], baseOrientation=self.object_target_pose[3:], globalScaling=1., useFixedBase=True)
 
+        #Add obstacles
         if self.include_obstacle:
-            self.obstacleUid = p.loadURDF(self.obstacle_file_path, basePosition=[.6, 0.2, 0], useFixedBase=True)
+            #self.obstacleUid = p.loadURDF(self.obstacle_file_path, basePosition=[.6, 0.2, 0], useFixedBase=True)
+            self.mazeUid = p.loadURDF(self.maze_file_path, basePosition=[1.2, 0.2, 0], useFixedBase=True)
+
 
         p.setCollisionFilterGroupMask(self.targetUid, -1, 0, 0)  # remove collisions with targeUid
         p.setCollisionFilterPair(self.pandaUid, self.targetUid, -1, -1, 0)  # remove collision between robot and target
