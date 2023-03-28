@@ -1,0 +1,26 @@
+<robot name="onshape">
+<link name="part_1">
+<visual>
+<origin xyz="-0.12500000000000002776 -0.10000000000000018596 -0.049999999999999988898" rpy="0 -0 0" />
+<geometry>
+<mesh filename="package:///part_1.stl"/>
+</geometry>
+<material name="part_1_material">
+<color rgba="0.61568627450980395466 0.81176470588235294379 0.92941176470588238168 1.0"/>
+</material>
+</visual>
+<collision>
+<origin xyz="-0.12500000000000002776 -0.10000000000000018596 -0.049999999999999988898" rpy="0 -0 0" />
+<geometry>
+<mesh filename="package:///part_1.stl"/>
+</geometry>
+</collision>
+<inertial>
+<origin xyz="-0.63244680851063839189 -0.10851063829787305215 2.0816681711721685133e-17" rpy="0 0 0"/>
+<mass value="230.29999999999975557" />
+<inertia ixx="9.4842149822694743477" ixy="-5.5714042553191349683"  ixz="-4.0374275980316256433e-16" iyy="38.679874556737537716" iyz="1.2432839709686607796e-16" izz="47.780256205673673264" />
+</inertial>
+</link>
+
+
+</robot>
