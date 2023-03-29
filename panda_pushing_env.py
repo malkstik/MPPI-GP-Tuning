@@ -133,7 +133,7 @@ class PandaPushingEnv(gym.Env):
         #Add obstacles
         if self.include_obstacle:
             #self.obstacleUid = p.loadURDF(self.obstacle_file_path, basePosition=[.6, 0.2, 0], useFixedBase=True)
-            self.mazeUid = p.loadURDF(self.maze_file_path, basePosition=[1.2, 0.2, 0], useFixedBase=True)
+            self.mazeUid = p.loadURDF(self.maze_file_path, basePosition=[0.1, -0.1, 0], useFixedBase=True)
 
 
         p.setCollisionFilterGroupMask(self.targetUid, -1, 0, 0)  # remove collisions with targeUid
@@ -362,7 +362,7 @@ class PandaPushingEnv(gym.Env):
         # self.object_start_pos = self.cube_pos_distribution.sample()
         if self.include_obstacle:
             # with obstacles
-            object_start_pose_planar = np.array([0.4, 0., -np.pi * 0.2])
+            object_start_pose_planar = np.array([0., -0.4, -np.pi * 0.2])
             object_target_pose_planar = TARGET_POSE_OBSTACLES
         else:
             # free of obstacles
@@ -374,7 +374,7 @@ class PandaPushingEnv(gym.Env):
 
     def _planar_pose_to_world_pose(self, planar_pose):
         theta = planar_pose[-1]
-        plane_z = 0
+        plane_z = .01
         world_pos = np.array([planar_pose[0], planar_pose[1], plane_z])
         quat = np.array([0., 0., np.sin(theta * 0.5), np.cos(theta * 0.5)])
         world_pose = np.concatenate([world_pos, quat])
