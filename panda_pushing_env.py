@@ -47,7 +47,20 @@ class PandaPushingEnv(gym.Env):
         self.tableUid = None  # Table where to push
         self.objectUid = None  # Pushing object
         self.targetUid = None  # Target object
-        self.obstacleUid = None  # Obstacle object
+        self.obstacleUid1 = None  # Obstacle object
+        self.obstacleUid2 = None  # Obstacle object
+        self.obstacleUid3 = None  # Obstacle object
+        self.obstacleUid4 = None  # Obstacle object
+        self.obstacleUid5 = None  # Obstacle object
+        self.obstacleUids = [self.obstacleUid1 , self.obstacleUid2, self.obstacleUid3, self.obstacleUid4 , self.obstacleUid5]
+
+        self.basePos = np.array([[0.3, -0.75, 0],
+                                     [0.35, -1, 0],
+                                     [.55, -1.1, 0],
+                                     [.6, -0.75, 0],
+                                     [.7, -1.3, 0]
+        ])
+        
         self.mazeUid = None # Maze
 
 
@@ -132,8 +145,15 @@ class PandaPushingEnv(gym.Env):
 
         #Add obstacles
         if self.include_obstacle:
+            random_y = np.random.uniform(-0.1, 0.1, 5)
+            random_x = np.random.uniform(-0.05, 0.05, 5)
+            random_theta = np.random.uniform(-np.pi/2, np.pi/2, 5)
+            for i, obstacle in enumerate(self.obstacleUids):
+                base_orientation = np.array([0., 0., np.sin(random_theta[i] * 0.5), np.cos(random_theta[i] * 0.5)])
+                self.basePos[i] += np.array([random_x[i], random_y[i]+1, 0])
+                obstacle = p.loadURDF(self.obstacle_file_path, basePosition= self.basePos[i], baseOrientation = base_orientation, useFixedBase=True)
             #self.obstacleUid = p.loadURDF(self.obstacle_file_path, basePosition=[.6, 0.2, 0], useFixedBase=True)
-            self.mazeUid = p.loadURDF(self.maze_file_path, basePosition=[1.2, 0.2, 0], useFixedBase=True)
+            #self.mazeUid = p.loadURDF(self.maze_file_path, basePosition=[.15, -.1, 0], useFixedBase=True)
 
 
         p.setCollisionFilterGroupMask(self.targetUid, -1, 0, 0)  # remove collisions with targeUid
@@ -362,7 +382,7 @@ class PandaPushingEnv(gym.Env):
         # self.object_start_pos = self.cube_pos_distribution.sample()
         if self.include_obstacle:
             # with obstacles
-            object_start_pose_planar = np.array([0.4, 0., -np.pi * 0.2])
+            object_start_pose_planar = np.array([0.2, 0., -np.pi * 0.2])
             object_target_pose_planar = TARGET_POSE_OBSTACLES
         else:
             # free of obstacles

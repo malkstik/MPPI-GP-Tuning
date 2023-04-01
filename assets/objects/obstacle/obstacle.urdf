@@ -13,7 +13,7 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <box size=".1 0.5 .1"/>
+        <box size=".05 0.08 .1"/>
       </geometry>
        <material name="maroon">
         <color rgba="0.7 0.588 0.588 1"/>
@@ -22,7 +22,7 @@
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <geometry>
-        <box size=".1 .5 .1"/>
+        <box size=".05 .08 .1"/>
       </geometry>
     </collision>
   </link>
