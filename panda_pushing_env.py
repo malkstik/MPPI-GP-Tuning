@@ -22,7 +22,9 @@ BOX_SIZE = 0.1
 TARGET_POSE_FREE = np.array([0.8, 0., 0.])
 TARGET_POSE_OBSTACLES = np.array([0.8, -0.1, 0.])
 OBSTACLE_CENTRE = np.array([0.6, 0.2, 0.])
-OBSTACLE_HALFDIMS = np.array([0.025, 0.04, 0.05])
+OBSTACLE_HALFDIMS = np.array([0.05, 0.25, 0.05])
+OBSTACLE_ORIENT = np.random.uniform(-np.pi/2, np.pi/2, 5)
+
 
 
 class PandaPushingEnv(gym.Env):
@@ -47,6 +49,7 @@ class PandaPushingEnv(gym.Env):
         self.tableUid = None  # Table where to push
         self.objectUid = None  # Pushing object
         self.targetUid = None  # Target object
+        self.obstacleUid = None  # Obstacle object
         self.obstacleUid1 = None  # Obstacle object
         self.obstacleUid2 = None  # Obstacle object
         self.obstacleUid3 = None  # Obstacle object
@@ -58,16 +61,11 @@ class PandaPushingEnv(gym.Env):
                                      [0.35, -1, 0],
                                      [.55, -1.1, 0],
                                      [.6, -0.75, 0],
-                                     [.7, -1.3, 0]
-        ])
-        self.mazeUid = None # Maze
-
-
+                                     [.7, -1.3, 0]])
+        
         self.object_file_path = os.path.join(assets_dir, "objects/cube/cube.urdf")
         self.target_file_path = os.path.join(assets_dir, "objects/cube/cube.urdf")
         self.obstacle_file_path = os.path.join(assets_dir, "objects/obstacle/obstacle.urdf")
-        self.maze_file_path = os.path.join(assets_dir, "objects/maze/robot.urdf")
-
 
         # self.init_panda_joint_state = [-0.028, 0.853, -0.016, -1.547, 0.017, 2.4, 2.305, 0., 0.]
         self.init_panda_joint_state = np.array([0., 0., 0., -np.pi * 0.5, 0., np.pi * 0.5, 0.])
@@ -146,16 +144,13 @@ class PandaPushingEnv(gym.Env):
         if self.include_obstacle:
             random_y = np.random.uniform(-0.1, 0.1, 5)
             random_x = np.random.uniform(-0.05, 0.05, 5)
-            random_theta = np.random.uniform(-np.pi/2, np.pi/2, 5)
             for i, obstacle in enumerate(self.obstacleUids):
-                base_orientation += np.array([0., 0., np.sin(random_theta[i] * 0.5), np.cos(random_theta[i] * 0.5)])
+                base_orientation = np.array([0., 0., np.sin(OBSTACLE_ORIENT[i] * 0.5), np.cos(OBSTACLE_ORIENT[i] * 0.5)])
                 self.basePos[i] += np.array([random_x[i], random_y[i]+1, 0])
                 obstacle = p.loadURDF(self.obstacle_file_path, basePosition= self.basePos[i], baseOrientation = base_orientation, useFixedBase=True)
             OBSTACLE_CENTRE = self.basePos
-            OBSTACLE_ORIENT = random_theta
             #self.obstacleUid = p.loadURDF(self.obstacle_file_path, basePosition=[.6, 0.2, 0], useFixedBase=True)
             #self.mazeUid = p.loadURDF(self.maze_file_path, basePosition=[.15, -.1, 0], useFixedBase=True)
-
 
         p.setCollisionFilterGroupMask(self.targetUid, -1, 0, 0)  # remove collisions with targeUid
         p.setCollisionFilterPair(self.pandaUid, self.targetUid, -1, -1, 0)  # remove collision between robot and target
@@ -383,11 +378,11 @@ class PandaPushingEnv(gym.Env):
         # self.object_start_pos = self.cube_pos_distribution.sample()
         if self.include_obstacle:
             # with obstacles
-            object_start_pose_planar = np.array([0.2, 0., -np.pi * 0.2])
+            object_start_pose_planar = np.array([0.2, -0.2, -np.pi * 0.2])
             object_target_pose_planar = TARGET_POSE_OBSTACLES
         else:
             # free of obstacles
-            object_start_pose_planar = np.array([0.2, 0., np.pi * 0.2])
+            object_start_pose_planar = np.array([0.4, 0., np.pi * 0.2])
             object_target_pose_planar = TARGET_POSE_FREE
         self.object_start_pose = self._planar_pose_to_world_pose(
             object_start_pose_planar)  # self.cube_pos_distribution.sample()
@@ -395,7 +390,7 @@ class PandaPushingEnv(gym.Env):
 
     def _planar_pose_to_world_pose(self, planar_pose):
         theta = planar_pose[-1]
-        plane_z = .01
+        plane_z = 0
         world_pos = np.array([planar_pose[0], planar_pose[1], plane_z])
         quat = np.array([0., 0., np.sin(theta * 0.5), np.cos(theta * 0.5)])
         world_pose = np.concatenate([world_pos, quat])

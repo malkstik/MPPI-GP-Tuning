@@ -10,7 +10,6 @@ TARGET_POSE_OBSTACLES_TENSOR = torch.as_tensor(TARGET_POSE_OBSTACLES, dtype=torc
 OBSTACLE_CENTRE_TENSOR = torch.as_tensor(OBSTACLE_CENTRE, dtype=torch.float32)[:2]
 OBSTACLE_HALFDIMS_TENSOR = torch.as_tensor(OBSTACLE_HALFDIMS, dtype=torch.float32)[:2]
 
-
 def collect_data_random(env, num_trajectories=1000, trajectory_length=10):
     """
     Collect data from the provided environment using uniformly random exploration.
@@ -524,10 +523,10 @@ def obstacle_avoidance_pushing_cost_function(state, action):
     cost = torch.zeros(B)
     Q = torch.diag(torch.tensor([1, 1, 0.1]))
     in_collision = torch.ones(B, dtype = bool)
-
+    
     for i in range(B):
         cost[i] = (state[i,:]- target_pose)@ Q @ (state[i,:] - target_pose).T
-        collision = torch.logical_and(collision, collision_detection(state, OBSTACLE_CENTRE[i], OBSTACLE_ORIENT[i]))
+        in_collision = torch.logical_and(in_collision, collision_detection(state, OBSTACLE_CENTRE[i], OBSTACLE_ORIENT[i]))
     in_collision = torch.where(in_collision, 1, 0).type(torch.float)
     cost += 100*in_collision
     # ---
@@ -573,7 +572,7 @@ class PushingController(object):
         """
         next_state = None
         # --- Your code here
-        next_state = self.model.forward(state,action)
+        next_state = self.model(state,action)
         # ---
         return next_state
 
