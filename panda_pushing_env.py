@@ -22,7 +22,7 @@ BOX_SIZE = 0.1
 TARGET_POSE_FREE = np.array([0.8, 0., 0.])
 TARGET_POSE_OBSTACLES = np.array([0.8, -0.1, 0.])
 OBSTACLE_CENTRE = np.array([0.6, 0.2, 0.])
-OBSTACLE_HALFDIMS = np.array([0.05, 0.25, 0.05])
+OBSTACLE_HALFDIMS = np.array([0.025, 0.04, 0.05])
 
 
 class PandaPushingEnv(gym.Env):
@@ -60,7 +60,6 @@ class PandaPushingEnv(gym.Env):
                                      [.6, -0.75, 0],
                                      [.7, -1.3, 0]
         ])
-        
         self.mazeUid = None # Maze
 
 
@@ -149,9 +148,11 @@ class PandaPushingEnv(gym.Env):
             random_x = np.random.uniform(-0.05, 0.05, 5)
             random_theta = np.random.uniform(-np.pi/2, np.pi/2, 5)
             for i, obstacle in enumerate(self.obstacleUids):
-                base_orientation = np.array([0., 0., np.sin(random_theta[i] * 0.5), np.cos(random_theta[i] * 0.5)])
+                base_orientation += np.array([0., 0., np.sin(random_theta[i] * 0.5), np.cos(random_theta[i] * 0.5)])
                 self.basePos[i] += np.array([random_x[i], random_y[i]+1, 0])
                 obstacle = p.loadURDF(self.obstacle_file_path, basePosition= self.basePos[i], baseOrientation = base_orientation, useFixedBase=True)
+            OBSTACLE_CENTRE = self.basePos
+            OBSTACLE_ORIENT = random_theta
             #self.obstacleUid = p.loadURDF(self.obstacle_file_path, basePosition=[.6, 0.2, 0], useFixedBase=True)
             #self.mazeUid = p.loadURDF(self.maze_file_path, basePosition=[.15, -.1, 0], useFixedBase=True)
 
