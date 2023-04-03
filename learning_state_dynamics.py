@@ -4,10 +4,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader, random_split
 from tqdm import tqdm
-from panda_pushing_env import TARGET_POSE_FREE, TARGET_POSE_OBSTACLES, OBSTACLE_HALFDIMS, OBSTACLE_CENTRE, BOX_SIZE, OBSTACLE_ORIENT
+from panda_pushing_env import TARGET_POSE_FREE, TARGET_POSE_OBSTACLES, OBSTACLE_HALFDIMS, BOX_SIZE
 TARGET_POSE_FREE_TENSOR = torch.as_tensor(TARGET_POSE_FREE, dtype=torch.float32)
 TARGET_POSE_OBSTACLES_TENSOR = torch.as_tensor(TARGET_POSE_OBSTACLES, dtype=torch.float32)
-OBSTACLE_CENTRE_TENSOR = torch.as_tensor(OBSTACLE_CENTRE, dtype=torch.float32)[:2]
+#OBSTACLE_CENTRE_TENSOR = torch.as_tensor(OBSTACLE_CENTRE, dtype=torch.float32)[:2]
 OBSTACLE_HALFDIMS_TENSOR = torch.as_tensor(OBSTACLE_HALFDIMS, dtype=torch.float32)[:2]
 
 def collect_data_random(env, num_trajectories=1000, trajectory_length=10):
@@ -401,115 +401,85 @@ def free_pushing_cost_function(state, action):
     B = state.shape[0]
     cost = torch.zeros(B)
     Q = torch.diag(torch.tensor([1, 1, 0.1]))
-    for i in range(B):
-      cost[i] = (state[i,:]- target_pose)@ Q @ (state[i,:] - target_pose).T
+    state_diff = torch.unsqueeze((state-target_pose), -1)
+    cost = torch.sum(torch.einsum('bij,jk,bik->bi', state_diff, Q, state_diff), dim=1)
     # ---
     return cost
 
-
-def collision_detection(state, obs_centre, obs_orient):
+def collision_detection(state, obs_centre):
     """
     Checks if the state is in collision with the obstacle.
     The obstacle geometry is known and provided in obstacle_centre and obstacle_halfdims.
     :param state: torch tensor of shape (B, state_size)
     :return: in_collision: torch tensor of shape (B,) containing 1 if the state is in collision and 0 if not.
     """
-    #TODO: rotate to obstacle angle initially
-    obstacle_centre = obs_centre # torch tensor of shape (2,) consisting of obstacle centre (x, y)
+    obstacle_centre = torch.from_numpy(obs_centre[:2])  # torch tensor of shape (2,) consisting of obstacle centre (x, y)
     obstacle_dims = 2 * OBSTACLE_HALFDIMS_TENSOR  # torch tensor of shape (2,) consisting of (w_obs, l_obs)
-    box_size = BOX_SIZE  # scalar for parameter w
+    box_halfdim = BOX_SIZE  # scalar for parameter w
     in_collision = None
     # --- Your code here
-    #Idea: If any box corner is in the obstacle or any obstacle corner is in the box, we can say that we have a collision
-
+    w_obs, l_obs = OBSTACLE_HALFDIMS_TENSOR
     B = state.shape[0]
-    w = box_size
-    wobs, lobs= obstacle_dims[0] , obstacle_dims[1]
-    xobs, yobs = obstacle_centre[0], obstacle_centre[1]
-    xbox, ybox = state[:,0], state[:,1]
-
-
-    #Compute rotation matrix to make obstacle have angle of 0 -> retrieve bounding edges
-    obs_rot = torch.zeros((2,2))
-    obs_rot[0,0] = torch.cos(-obs_orient)
-    obs_rot[0,1] = -torch.sin(-obs_orient)
-    obs_rot[1,0] = torch.sin(-obs_orient)
-    obs_rot[1,1] = torch.cos(obs_orient)
-
-    obs_rot = obs_rot.repeat((B,1,1)) 
-
-    #Obtain coordinates of right, left, top, and bottom bounding edges of obstacle
-    obs_R = xobs + wobs/2
-    obs_L = xobs - wobs/2
-    obs_T = yobs + lobs/2
-    obs_B = yobs - lobs/2
-
-    #offsets to find corners of box
-    sin_off1 = w/2/(2**0.5)*torch.reciprocal(torch.sin(state[:,2]+torch.pi/4))
-    cos_off1 = w/2/(2**0.5)*torch.reciprocal(torch.cos(state[:,2]+torch.pi/4))
-    sin_off2 = w/2/(2**0.5)*torch.reciprocal(torch.pi/4 - torch.sin(state[:,2]))
-    cos_off2 = w/2/(2**0.5)*torch.reciprocal(torch.pi/4 - torch.cos(state[:,2]))
-
-    #Corner points of obstacle
-    obs_pts = torch.tensor([[obs_R, obs_L, obs_L, obs_R],
-                            [obs_T, obs_T, obs_B, obs_B]])
     
-    #Corner points of box
-    box_pts = torch.zeros(B,2,4)
-    box_pts[:,0,0], box_pts[:,1,0] = xbox + cos_off1, ybox + sin_off1
-    box_pts[:,0,1], box_pts[:,1,1] = xbox - cos_off2, ybox + sin_off2
-    box_pts[:,0,2], box_pts[:,1,2] = xbox - cos_off1, ybox - sin_off1
-    box_pts[:,0,3], box_pts[:,1,3] = xbox + cos_off2, ybox - sin_off2
+    in_collision = torch.ones(B, device=state.device) 
 
-    box_pts = obs_rot @ box_pts
+    # Check those close enough to fail 1 with Separating Axis Theorem
+    to_corner = lambda w, l, theta: torch.hstack([w*torch.cos(theta)-l*torch.sin(theta),
+                                                  w*torch.sin(theta)+l*torch.cos(theta)])
 
-    #Check if any box corners are inside of the obstacle
-    box_in_obs_agg = torch.zeros(B)
-    for i in range(4):
-      x = box_pts[:,0,i]
-      y = box_pts[:,1,i]
-      box_in_obs = torch.logical_and(torch.le(x, obs_R), torch.ge(x,obs_L))
-      box_in_obs = torch.logical_and(box_in_obs, torch.le(y,obs_T))
-      box_in_obs = torch.logical_and(box_in_obs, torch.ge(y,obs_B))
-      box_in_obs_agg = torch.logical_or(box_in_obs_agg, box_in_obs)
+    zero_tensor = torch.zeros(1, device=state.device)
 
-    #Compute rotation matrices to make box have angle of 0 -> can now retrieve bounding edges
-    rot = torch.zeros((B,2,2))
-    rot[:,0,0] = torch.cos(-state[:,2])
-    rot[:,0,1] = -torch.sin(-state[:,2])
-    rot[:,1,0] = torch.sin(-state[:,2])
-    rot[:,1,1] = torch.cos(-state[:,2])
+    obs_verts = torch.hstack((obstacle_centre + to_corner(w_obs, l_obs, zero_tensor),
+                              obstacle_centre + to_corner(w_obs, -l_obs, zero_tensor),
+                              obstacle_centre + to_corner(-w_obs, -l_obs, zero_tensor),
+                              obstacle_centre + to_corner(-w_obs, l_obs, zero_tensor)
+                              )).reshape(-1, 4, 2)
+    
 
-    obs_pts = obs_pts.repeat((B,1,1))
+    state_verts = torch.hstack((state[:,:2] + to_corner(box_halfdim, box_halfdim, state[:,2:]),
+                                state[:,:2] + to_corner(box_halfdim, -box_halfdim, state[:,2:]),
+                                state[:,:2] + to_corner(-box_halfdim, -box_halfdim, state[:,2:]),
+                                state[:,:2] + to_corner(-box_halfdim, box_halfdim, state[:,2:])
+                                )).reshape(-1, 4, 2)
+    
+    # obstacle collide with box
+    si_Minus = state_verts[:,-1] - state_verts[:,0] # dims are (B, 2)
+    for i in range(state_verts.shape[1]):
+        si_Plus = torch.roll(state_verts, -i, 1)[:,1] - torch.roll(state_verts, -i, 1)[:,0] # the proposed seperating axis
+        ni = torch.cat([-si_Plus[:,1:], si_Plus[:,:1]],dim=-1) # the normal to the proposed separating axis
+        sgni = torch.sign(torch.sum(si_Minus * ni, dim=1)) # side that rect A is on    
 
-    #Apply our coordinate transform
-    rot_obs_pts = rot @obs_pts 
-    rot_box_pts = rot @box_pts
+        prop_axis = torch.ones_like(in_collision) # becomes 0 if axis ruled out (if any not ruled out then no collision)
+        for j in range(obs_verts.shape[1]):
+            sij = torch.roll(obs_verts, -j, 1)[:,0] - torch.roll(state_verts, -i, 1)[:,0]
+            sgnj = torch.sign(torch.sum(sij * ni, dim=1))
 
-    #Check if any collision corners are inside of obstacle
-    obs_in_box_agg = torch.zeros(B)
-    for i in range(4):
-      # Obstacle corner coordinates
-      x = rot_obs_pts[:,0,i]
-      y = rot_obs_pts[:,1,i]
+            prop_axis[sgni * sgnj > 0] = 0 # if they have same sign then rule out axis candidate
 
-      #Obtain coordinates of right, left, top, and bottom bounding edges of box
-      box_R = rot_box_pts[:,0,0]
-      box_L = rot_box_pts[:,0,1]
-      box_T = rot_box_pts[:,1,0]
-      box_B = rot_box_pts[:,1,2]
-      obs_in_box = torch.logical_and(torch.le(x,box_R), torch.ge(x,box_L))
-      obs_in_box = torch.logical_and(obs_in_box, torch.le(y,box_T))
-      obs_in_box = torch.logical_and(obs_in_box, torch.ge(y,box_B)) 
-      obs_in_box_agg = torch.logical_or(obs_in_box_agg, obs_in_box)
+        in_collision[prop_axis == 1] = 0 # Found seperating axis: no j vert ruled out i's edge
+        si_Minus = -si_Plus
+    
+    # box collide with obstacle
+    si_Minus = obs_verts[:,-1] - obs_verts[:,0] # dims are (B, 2)
+    for i in range(obs_verts.shape[1]):
+        si_Plus = torch.roll(obs_verts, -i, 1)[:,1] - torch.roll(obs_verts, -i, 1)[:,0] # the proposed seperating axis
+        ni = torch.cat([-si_Plus[:,1:], si_Plus[:,:1]],dim=-1) # the normal to the proposed separating axis
+        sgni = torch.sign(torch.sum(si_Minus * ni, dim=1)) # side that rect A is on        
 
-    in_collision = torch.logical_or(box_in_obs_agg, obs_in_box_agg)
-    #in_collision = torch.where(in_collision, 1, 0).type(torch.float)
+        temp_axis = torch.ones_like(in_collision)
+        for j in range(state_verts.shape[1]):
+            sij = torch.roll(state_verts, -j, 1)[:,0] - torch.roll(obs_verts, -i, 1)[:,0]
+            sgnj = torch.sign(torch.sum(sij * ni, dim=1))
+
+            temp_axis[sgni * sgnj > 0] = 0
+                
+        in_collision[temp_axis == 1] = 0 # Found seperating axis: no j vert ruled out i's edge
+        si_Minus = -si_Plus
+
     # ---
     return in_collision
 
-
-def obstacle_avoidance_pushing_cost_function(state, action):
+def obstacle_avoidance_pushing_cost_function(state, action, OBSTACLE_CENTRE):
     """
     Compute the state cost for MPPI on a setup with obstacles.
     :param state: torch tensor of shape (B, state_size)
@@ -519,19 +489,19 @@ def obstacle_avoidance_pushing_cost_function(state, action):
     target_pose = TARGET_POSE_OBSTACLES_TENSOR  # torch tensor of shape (3,) containing (pose_x, pose_y, pose_theta)
     cost = None
     # --- Your code here
-    B = state.shape[0]
-    cost = torch.zeros(B)
-    Q = torch.diag(torch.tensor([1, 1, 0.1]))
-    in_collision = torch.ones(B, dtype = bool)
+    B = action.shape[0]
+    cost = free_pushing_cost_function(state, action)
     
-    for i in range(B):
-        cost[i] = (state[i,:]- target_pose)@ Q @ (state[i,:] - target_pose).T
-        in_collision = torch.logical_and(in_collision, collision_detection(state, OBSTACLE_CENTRE[i], OBSTACLE_ORIENT[i]))
+    #Check for collisions and penalize
+    in_collision = torch.zeros((B), dtype= bool)
+    for j in range(5):
+        in_collision = torch.logical_or(in_collision, collision_detection(state, OBSTACLE_CENTRE[j]))
     in_collision = torch.where(in_collision, 1, 0).type(torch.float)
+    if torch.min(in_collision) >0:
+        print("Couldn't find one without colliding")
     cost += 100*in_collision
     # ---
     return cost
-
 
 class PushingController(object):
     """
@@ -561,7 +531,8 @@ class PushingController(object):
                          noise_sigma=noise_sigma,
                          lambda_=lambda_value,
                          u_min=u_min,
-                         u_max=u_max)
+                         u_max=u_max,
+                         OBSTACLE_CENTRE= env.OBSTACLE_CENTRE)
 
     def _compute_dynamics(self, state, action):
         """

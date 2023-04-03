@@ -21,10 +21,13 @@ BOX_SIZE = 0.1
 
 TARGET_POSE_FREE = np.array([0.8, 0., 0.])
 TARGET_POSE_OBSTACLES = np.array([0.8, -0.1, 0.])
-OBSTACLE_CENTRE = np.array([0.6, 0.2, 0.])
-OBSTACLE_HALFDIMS = np.array([0.05, 0.25, 0.05])
-OBSTACLE_ORIENT = np.random.uniform(-np.pi/2, np.pi/2, 5)
-
+OBSTACLE_HALFDIMS = np.array([0.025, 0.04, 0.05])
+#OBSTACLE_ORIENT = np.random.uniform(-np.pi/2, np.pi/2, 5)
+INIT_OBSTACLE_CENTRE = np.array([[0.45, -0.2, 0],
+                            [.5, .1, 0],
+                            [.6, 0., 0],
+                            [.65, 0.2, 0],
+                            [.7, -0.3, 0]])
 
 
 class PandaPushingEnv(gym.Env):
@@ -56,13 +59,8 @@ class PandaPushingEnv(gym.Env):
         self.obstacleUid4 = None  # Obstacle object
         self.obstacleUid5 = None  # Obstacle object
         self.obstacleUids = [self.obstacleUid1 , self.obstacleUid2, self.obstacleUid3, self.obstacleUid4 , self.obstacleUid5]
+        self.OBSTACLE_CENTER = None
 
-        self.basePos = np.array([[0.3, -0.75, 0],
-                                     [0.35, -1, 0],
-                                     [.55, -1.1, 0],
-                                     [.6, -0.75, 0],
-                                     [.7, -1.3, 0]])
-        
         self.object_file_path = os.path.join(assets_dir, "objects/cube/cube.urdf")
         self.target_file_path = os.path.join(assets_dir, "objects/cube/cube.urdf")
         self.obstacle_file_path = os.path.join(assets_dir, "objects/obstacle/obstacle.urdf")
@@ -140,15 +138,16 @@ class PandaPushingEnv(gym.Env):
         # p.changeDynamics(self.objectUid, -1, 2)
         self.targetUid = p.loadURDF(self.target_file_path, basePosition=self.object_target_pose[:3], baseOrientation=self.object_target_pose[3:], globalScaling=1., useFixedBase=True)
 
+        self.OBSTACLE_CENTRE = INIT_OBSTACLE_CENTRE.copy()
         #Add obstacles
         if self.include_obstacle:
             random_y = np.random.uniform(-0.1, 0.1, 5)
             random_x = np.random.uniform(-0.05, 0.05, 5)
             for i, obstacle in enumerate(self.obstacleUids):
-                base_orientation = np.array([0., 0., np.sin(OBSTACLE_ORIENT[i] * 0.5), np.cos(OBSTACLE_ORIENT[i] * 0.5)])
-                self.basePos[i] += np.array([random_x[i], random_y[i]+1, 0])
-                obstacle = p.loadURDF(self.obstacle_file_path, basePosition= self.basePos[i], baseOrientation = base_orientation, useFixedBase=True)
-            OBSTACLE_CENTRE = self.basePos
+                #base_orientation = np.array([0., 0., np.sin(OBSTACLE_ORIENT[i] * 0.5), np.cos(OBSTACLE_ORIENT[i] * 0.5)])
+                self.OBSTACLE_CENTRE[i] += np.array([random_x[i], random_y[i], 0])
+                obstacle = p.loadURDF(self.obstacle_file_path, basePosition= self.OBSTACLE_CENTRE[i].tolist(), useFixedBase=True)
+            #self.obstacleUid = p.loadURDF(self.obstacle_file_path, basePosition=OBSTACLE_CENTRE[1], useFixedBase=True)
             #self.obstacleUid = p.loadURDF(self.obstacle_file_path, basePosition=[.6, 0.2, 0], useFixedBase=True)
             #self.mazeUid = p.loadURDF(self.maze_file_path, basePosition=[.15, -.1, 0], useFixedBase=True)
 
@@ -156,7 +155,7 @@ class PandaPushingEnv(gym.Env):
         p.setCollisionFilterPair(self.pandaUid, self.targetUid, -1, -1, 0)  # remove collision between robot and target
 
         p.changeVisualShape(self.targetUid, -1, rgbaColor=[0.05, 0.95, 0.05, .1])  # Change color for target
-
+        print('Reset Environment')
         # get inital state after reset
         state = self.get_state()
         return state
@@ -378,7 +377,7 @@ class PandaPushingEnv(gym.Env):
         # self.object_start_pos = self.cube_pos_distribution.sample()
         if self.include_obstacle:
             # with obstacles
-            object_start_pose_planar = np.array([0.2, -0.2, -np.pi * 0.2])
+            object_start_pose_planar = np.array([0.4, 0., -np.pi * 0.2])
             object_target_pose_planar = TARGET_POSE_OBSTACLES
         else:
             # free of obstacles

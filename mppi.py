@@ -90,7 +90,7 @@ class MPPI():
     based off of https://github.com/ferreirafabio/mppi_pendulum
     """
 
-    def __init__(self, dynamics, running_cost, nx, noise_sigma, num_samples=100, horizon=15, device="cpu",
+    def __init__(self, dynamics, running_cost, nx, noise_sigma, OBSTACLE_CENTRE, num_samples=100, horizon=15, device="cpu",
                  terminal_state_cost=None,
                  lambda_=1.,
                  noise_mu=None,
@@ -105,7 +105,8 @@ class MPPI():
                  rollout_var_cost=0,
                  rollout_var_discount=0.95,
                  sample_null_action=False,
-                 noise_abs_cost=False):
+                 noise_abs_cost=False,
+                 ):
         """
         :param dynamics: function(state, action) -> next_state (K x nx) taking in batch state (K x nx) and action (K x nu)
         :param running_cost: function(state, action) -> cost (K) taking in batch state and action (same as dynamics)
@@ -199,13 +200,16 @@ class MPPI():
         self.states = None
         self.actions = None
 
+        #ADJUSTMENTS FROM AARON
+        self.obs_center = OBSTACLE_CENTRE
+
     @handle_batch_input(n=2)
     def _dynamics(self, state, u, t):
         return self.F(state, u, t) if self.step_dependency else self.F(state, u)
 
     @handle_batch_input(n=2)
-    def _running_cost(self, state, u):
-        return self.running_cost(state, u)
+    def _running_cost(self, state, u, obs_center):
+        return self.running_cost(state, u, obs_center)
 
     def command(self, state):
         """
@@ -263,7 +267,10 @@ class MPPI():
         for t in range(T):
             u = self.u_scale * perturbed_actions[:, t].repeat(self.M, 1, 1)
             state = self._dynamics(state, u, t)
-            c = self._running_cost(state, u)
+            
+            #COST FUNCTION
+            c = self._running_cost(state, u, self.obs_center)
+            
             cost_samples += c
             if self.M > 1:
                 cost_var += c.var(dim=0) * (self.rollout_var_discount ** t)
