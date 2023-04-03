@@ -4,7 +4,7 @@ from torch.distributions import MultivariateNormal
 from learning_state_dynamics import TARGET_POSE_OBSTACLES, BOX_SIZE, ResidualDynamicsModel, PushingController, obstacle_avoidance_pushing_cost_function
 import numpy as np
 from panda_pushing_env import *
-
+from tqdm import tqdm
 
 #GAME PLAN
 '''
@@ -35,7 +35,9 @@ model_path = os.path.join('pushing_multi_step_residual_dynamics_model.pt')
 pushing_multistep_residual_dynamics_model.load_state_dict(torch.load(model_path))
 
 
-def execute(env, model, controller, state_0, num_steps_max = 20):
+
+
+def execute(env, controller, state_0, num_steps_max = 20):
     state = state_0
     for i in range(num_steps_max):
         action = controller.control(state)
@@ -53,8 +55,7 @@ def execution_cost(i, goal_distance):
     cost = i + 10*goal_distance 
     return cost
 
-
-def collect_data_random(env, model, controller, dataset_size = 100):
+def collect_data_GP(env, controller, dataset_size = 100):
     """
     Collect data from the provided environment using uniformly random exploration.
     :param env: Gym Environment instance.
@@ -72,23 +73,29 @@ def collect_data_random(env, model, controller, dataset_size = 100):
         where x_0 is the state after resetting the environment with env.reset()
     All data elements must be encoded as np.float32.
     """
-    collected_data = None
     # --- Your code here
     collected_data = []
-    env = PandaPushingEnv(visualizer=None, render_non_push_motions=False,  include_obstacle=True, camera_heigh=800, camera_width=800, render_every_n_steps=5)
-    for i in range (dataset_size):
+    pbar = tqdm(range(dataset_size))
+
+    for i in pbar:
+        pbar.set_description(f'Iteration: {i:.0f}')
         state_0 = env.reset()
-        controller = PushingController(env, pushing_multistep_residual_dynamics_model,
-                               obstacle_avoidance_pushing_cost_function, num_samples=1000, horizon=20)
         data = {}
         data['hyperparameters'] = np.zeros(5, dtype = np.float32) #noise_sigma, lambda_value, x, y, theta
         data['cost'] = 0
         # Randomly Sample Hyperparameter values
-        #SAMPLING STUFGFF
-        #WEFASEDRHGERTSIHJNSE
+        data['hyperparameters'][0] = np.random.uniform(0, 2)
+        data['hyperparameters'][1] = np.random.uniform(0, 0.015)
+        data['hyperparameters'][2] = np.random.uniform(0, 2)
+        data['hyperparameters'][3] = np.random.uniform(0, 2)
+        data['hyperparameters'][4] = np.random.uniform(0, 1)
+        #Should we also consider changing horizon?
         # Simulate using these hyperparameters
         controller.mppi.noise_sigma = data['hyperparameters'][0]
-        controller.lambda_ = data['hyperparameters'][1]        
+        controller.lambda_ = data['hyperparameters'][1]
+        controller.x_weight = data['hyperparameters'][2]
+        controller.y_weight = data['hyperparameters'][3]
+        controller.theta_weight = data['hyperparameters'][3]
         steps, goal_distance, _ = execute(env, controller, state_0)
         # Add cost to data
         data['cost'] = execution_cost(steps, goal_distance)
@@ -98,39 +105,60 @@ def collect_data_random(env, model, controller, dataset_size = 100):
     return collected_data
 
 
-def process_data_single_step(collected_data, batch_size=500):
-    """
-    Process the collected data and returns a DataLoader for train and one for validation.
-    The data provided is a list of trajectories (like collect_data_random output).
-    Each DataLoader must load dictionary as {'state': x_t,
-     'action': u_t,
-     'next_state': x_{t+1},
-    }
-    where:
-     x_t: torch.float32 tensor of shape (batch_size, state_size)
-     u_t: torch.float32 tensor of shape (batch_size, action_size)
-     x_{t+1}: torch.float32 tensor of shape (batch_size, state_size)
+class RBF_GP(gpytorch.models.ExactGP):
 
-    The data should be split in a 80-20 training-validation split.
-    :param collected_data:
-    :param batch_size: <int> size of the loaded batch.
-    :return:
+    def __init__(self, train_x, train_y, likelihood):
+        super().__init__(train_x, train_y, likelihood)
+        self.mean_module = None
+        self.covar_module = None
+        # --- Your code here
+        self.mean_module = gpytorch.means.ZeroMean(torch.Size([5]))
+        self.covar_module = gpytorch.kernels.ScaleKernel(
+            gpytorch.kernels.RBFKernel(batch_shape=torch.Size([5]), ard_num_dims = 5),
+            batch_shape=torch.Size([5])
+        )
+        # ---
+    def forward(self, x):
+        """
+        Args:
+            x: torch.tensor of shape (B, 5) concatenated state and action
 
-    Hints:
-     - Pytorch provides data tools for you such as Dataset and DataLoader and random_split
-     - You should implement SingleStepDynamicsDataset below.
-        This class extends pytorch Dataset class to have a custom data format.
+        Returns: gpytorch.distributions.MultitaskMultivariateNormal - Gaussian prediction for next state
+
+        """
+        mean_x = self.mean_module.forward(x)
+        covar_x = self.covar_module(x)
+        return gpytorch.distributions.MultitaskMultivariateNormal.from_batch_mvn(
+            gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
+        )
+
+
+def train_gp_hyperparams(model, likelihood, hyperparameters, cost, lr):
     """
-    train_loader = None
-    val_loader = None
+        Function which optimizes the GP Kernel & likelihood hyperparameters
+    Args:
+        model: gpytorch.model.ExactGP model
+        likelihood: gpytorch likelihood
+        hyperparameters: (N, 5) torch.tensor of hyperpameters
+        train_next_states: (N,) torch.tensor of cost due to hyperpameters
+        lr: Learning rate
+
+    """
     # --- Your code here
-    total_Dataset = SingleStepDynamicsDataset(collected_data)
-    train_set_size = int(0.8*len(total_Dataset))
-    val_set_size = len(total_Dataset) - train_set_size
+    training_iter = 115
+    model.train()
+    likelihood.train()
 
-    train_set, val_set = random_split(total_Dataset, [train_set_size, val_set_size])
-
-    train_loader = DataLoader(train_set, batch_size = batch_size)
-    val_loader = DataLoader(val_set, batch_size = batch_size)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)  # Includes GaussianLikelihood parameters
+    mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
+    for i in range(training_iter):
+        # Zero gradients from previous iteration
+        optimizer.zero_grad()
+        # Output from model
+        output = model(hyperparameters)
+        # Calc loss and backprop gradients
+        loss = -mll(output, cost)
+        loss.backward()
+        print('Iter %d/%d - Loss: %.3f' % (i + 1, training_iter, loss.item()))
+        optimizer.step()
     # ---
-    return train_loader, val_loader

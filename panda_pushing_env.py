@@ -155,7 +155,7 @@ class PandaPushingEnv(gym.Env):
         p.setCollisionFilterPair(self.pandaUid, self.targetUid, -1, -1, 0)  # remove collision between robot and target
 
         p.changeVisualShape(self.targetUid, -1, rgbaColor=[0.05, 0.95, 0.05, .1])  # Change color for target
-        print('Reset Environment')
+        #print('Reset Environment')
         # get inital state after reset
         state = self.get_state()
         return state
