@@ -55,7 +55,7 @@ def execution_cost(i, goal_distance):
     cost = i + 10*goal_distance 
     return cost
 
-def collect_data_GP(env, controller, dataset_size = 100):
+def collect_data_GP(env, controller, dataset_size = 120):
     """
     Collect data from the provided environment using uniformly random exploration.
     :param env: Gym Environment instance.

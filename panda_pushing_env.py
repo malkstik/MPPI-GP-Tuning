@@ -21,13 +21,14 @@ BOX_SIZE = 0.1
 
 TARGET_POSE_FREE = np.array([0.8, 0., 0.])
 TARGET_POSE_OBSTACLES = np.array([0.8, -0.1, 0.])
-OBSTACLE_HALFDIMS = np.array([0.025, 0.04, 0.05])
+OBSTACLE_HALFDIMS = np.array([0.025/2, 0.04/2, 0.05])
 #OBSTACLE_ORIENT = np.random.uniform(-np.pi/2, np.pi/2, 5)
 INIT_OBSTACLE_CENTRE = np.array([[0.45, -0.2, 0],
-                            [.5, .1, 0],
+                            [.5, .15, 0],
                             [.6, 0., 0],
                             [.65, 0.2, 0],
-                            [.7, -0.3, 0]])
+                            [.7, -0.2, 0]])
+PERSONAL_SPACE = 1.2*(2*((OBSTACLE_HALFDIMS[0]**2 + OBSTACLE_HALFDIMS[1]**2 )**0.5)*1.5 + BOX_SIZE)
 
 
 class PandaPushingEnv(gym.Env):
@@ -59,7 +60,6 @@ class PandaPushingEnv(gym.Env):
         self.obstacleUid4 = None  # Obstacle object
         self.obstacleUid5 = None  # Obstacle object
         self.obstacleUids = [self.obstacleUid1 , self.obstacleUid2, self.obstacleUid3, self.obstacleUid4 , self.obstacleUid5]
-        self.OBSTACLE_CENTER = None
 
         self.object_file_path = os.path.join(assets_dir, "objects/cube/cube.urdf")
         self.target_file_path = os.path.join(assets_dir, "objects/cube/cube.urdf")
@@ -99,6 +99,7 @@ class PandaPushingEnv(gym.Env):
                                      cameraTargetPosition=[0.55, -0.35, 0.2])
 
         self.block_size = BOX_SIZE
+        self.OBSTACLE_CENTRE = INIT_OBSTACLE_CENTRE
 
         # Motion parameter
         self.lower_z = 0.02
@@ -112,6 +113,8 @@ class PandaPushingEnv(gym.Env):
                                                            np.pi]))  # TODO: Get observation space -- maybe a tuple of (top_img, block_position)
         self.action_space = spaces.Box(low=np.array([-1, -np.pi * 0.5, 0]),
                                        high=np.array([1, np.pi * 0.5, 1]))  #
+        
+        self.setPos = np.array([0.8, -0.1, 0.])
 
     def reset(self):
         self._set_object_positions()
@@ -141,11 +144,26 @@ class PandaPushingEnv(gym.Env):
         self.OBSTACLE_CENTRE = INIT_OBSTACLE_CENTRE.copy()
         #Add obstacles
         if self.include_obstacle:
-            random_y = np.random.uniform(-0.1, 0.1, 5)
-            random_x = np.random.uniform(-0.05, 0.05, 5)
+            self.setPos = np.array([[0.8, -0.1, 0.]]) #Init with just the initial object pose
+            i = 0
+            fail = 0
+            while self.setPos.shape[0] < 6:
+                random_y = np.random.uniform(-0.17, 0.17)
+                random_x = np.random.uniform(-0.1, 0.1)
+                new_pt = self.OBSTACLE_CENTRE[i] + np.array([random_x, random_y, 0])
+               
+                if np.min(np.linalg.norm(new_pt[:2]- self.setPos[:,:2], axis = 1)) > PERSONAL_SPACE:
+                    self.OBSTACLE_CENTRE[i] = new_pt
+                    self.setPos = np.vstack((self.setPos, new_pt))
+                    i += 1
+                else:
+                    fail += 1
+                    # Resample and try again
+                    if fail > 50:
+                        self.OBSTACLE_CENTRE = INIT_OBSTACLE_CENTRE
+                        break
             for i, obstacle in enumerate(self.obstacleUids):
                 #base_orientation = np.array([0., 0., np.sin(OBSTACLE_ORIENT[i] * 0.5), np.cos(OBSTACLE_ORIENT[i] * 0.5)])
-                self.OBSTACLE_CENTRE[i] += np.array([random_x[i], random_y[i], 0])
                 obstacle = p.loadURDF(self.obstacle_file_path, basePosition= self.OBSTACLE_CENTRE[i].tolist(), useFixedBase=True)
             #self.obstacleUid = p.loadURDF(self.obstacle_file_path, basePosition=OBSTACLE_CENTRE[1], useFixedBase=True)
             #self.obstacleUid = p.loadURDF(self.obstacle_file_path, basePosition=[.6, 0.2, 0], useFixedBase=True)

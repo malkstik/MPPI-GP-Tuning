@@ -388,7 +388,7 @@ class ResidualDynamicsModel(nn.Module):
         return next_state
 
 
-def free_pushing_cost_function(state, action, Q):
+def free_pushing_cost_function(state, action, Q, env):
     """
     Compute the state cost for MPPI on a setup without obstacles.
     :param state: torch tensor of shape (B, state_size)
@@ -403,6 +403,9 @@ def free_pushing_cost_function(state, action, Q):
     Q = torch.from_numpy(Q)
     state_diff = torch.unsqueeze((state-target_pose), -1)
     cost = torch.sum(torch.einsum('bij,jk,bik->bi', state_diff, Q, state_diff), dim=1)
+    #Rule out impossible actions
+    if not env.check_action_valid(action.detach().cpu().numpy()):
+        cost = 200
     # ---
     return cost
 
@@ -479,7 +482,7 @@ def collision_detection(state, obs_centre):
     # ---
     return in_collision
 
-def obstacle_avoidance_pushing_cost_function(state, action, OBSTACLE_CENTRE, Q):
+def obstacle_avoidance_pushing_cost_function(state, action, OBSTACLE_CENTRE, Q, env):
     """
     Compute the state cost for MPPI on a setup with obstacles.
     :param state: torch tensor of shape (B, state_size)
@@ -490,7 +493,7 @@ def obstacle_avoidance_pushing_cost_function(state, action, OBSTACLE_CENTRE, Q):
     cost = None
     # --- Your code here
     B = action.shape[0]
-    cost = free_pushing_cost_function(state, action, Q)
+    cost = free_pushing_cost_function(state, action, Q, env)
     
     #Check for collisions and penalize
     in_collision = torch.zeros((B), dtype= bool)
@@ -519,20 +522,23 @@ class PushingController(object):
         state_dim = env.observation_space.shape[0]
         u_min = torch.from_numpy(env.action_space.low)
         u_max = torch.from_numpy(env.action_space.high)
+        print(u_min)
+        print(u_max)
         noise_sigma = 0.5 * torch.eye(env.action_space.shape[0])
         lambda_value = 0.01
         # ---
         from mppi import MPPI
         self.mppi = MPPI(self._compute_dynamics,
-                         cost_function,
-                         nx=state_dim,
+                         cost_function, 
+                         state_dim, 
+                         noise_sigma,
+                         env, env.OBSTACLE_CENTRE,
                          num_samples=num_samples,
                          horizon=horizon,
-                         noise_sigma=noise_sigma,
                          lambda_=lambda_value,
                          u_min=u_min,
-                         u_max=u_max,
-                         OBSTACLE_CENTRE= env.OBSTACLE_CENTRE)
+                         u_max=u_max
+        )
 
     def _compute_dynamics(self, state, action):
         """

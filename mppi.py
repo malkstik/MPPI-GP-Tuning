@@ -90,7 +90,7 @@ class MPPI():
     based off of https://github.com/ferreirafabio/mppi_pendulum
     """
 
-    def __init__(self, dynamics, running_cost, nx, noise_sigma, OBSTACLE_CENTRE, num_samples=100, horizon=15, device="cpu",
+    def __init__(self, dynamics, running_cost, nx, noise_sigma, env, OBSTACLE_CENTRE, num_samples=100, horizon=15, device="cpu",
                  terminal_state_cost=None,
                  lambda_=1.,
                  noise_mu=None,
@@ -208,14 +208,15 @@ class MPPI():
         self.x_weight = x_weight
         self.y_weight = y_weight
         self.theta_weight = theta_weight
+        self.env = env
 
     @handle_batch_input(n=2)
     def _dynamics(self, state, u, t):
         return self.F(state, u, t) if self.step_dependency else self.F(state, u)
 
     @handle_batch_input(n=2)
-    def _running_cost(self, state, u, obs_center, Q):
-        return self.running_cost(state, u, obs_center, Q)
+    def _running_cost(self, state, u, obs_center, Q, env):
+        return self.running_cost(state, u, obs_center, Q, env)
 
     def command(self, state):
         """
@@ -242,6 +243,7 @@ class MPPI():
         action = self.U[:self.u_per_command]
         # reduce dimensionality if we only need the first command
         if self.u_per_command == 1:
+            action = self._bound_action(action)
             action = action[0]
         return action
 
@@ -276,7 +278,7 @@ class MPPI():
             state = self._dynamics(state, u, t)
             
             #COST FUNCTION
-            c = self._running_cost(state, u, self.obs_center, Q)
+            c = self._running_cost(state, u, self.obs_center, Q, self.env)
             
             cost_samples += c
             if self.M > 1:
@@ -330,9 +332,13 @@ class MPPI():
     def _bound_action(self, action):
         if self.u_max is not None:
             for t in range(self.T):
-                u = action[:, self._slice_control(t)]
-                cu = torch.max(torch.min(u, self.u_max), self.u_min)
-                action[:, self._slice_control(t)] = cu
+                if action.shape[0] == 1:
+                    u = action
+                    action = torch.max(torch.min(u, self.u_max), self.u_min)
+                else:
+                    u = action[:, self._slice_control(t)]
+                    cu = torch.max(torch.min(u, self.u_max), self.u_min)
+                    action[:, self._slice_control(t)] = cu
         return action
 
     def _slice_control(self, t):
