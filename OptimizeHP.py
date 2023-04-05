@@ -130,9 +130,17 @@ class RBF_GP(gpytorch.models.ExactGP):
         return gpytorch.distributions.MultitaskMultivariateNormal.from_batch_mvn(
             gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
         )
+    
+    def predict(self, x):
+        pred = self.likelihood(self.forward(x))
+        pred_mu = pred.mean
+        pred_sigma = torch.diag_embed(pred.stddev ** 2)
+
+        return pred_mu, pred_sigma
 
 
 def train_gp_hyperparams(model, likelihood, hyperparameters, cost, lr):
+    
     """
         Function which optimizes the GP Kernel & likelihood hyperparameters
     Args:
@@ -161,3 +169,75 @@ def train_gp_hyperparams(model, likelihood, hyperparameters, cost, lr):
         print('Iter %d/%d - Loss: %.3f' % (i + 1, training_iter, loss.item()))
         optimizer.step()
     # ---
+
+class ThompsonSamplingGP:
+    
+    def __init__(self, GPmodel, likelihood, loss_fn, constraints, n_random_draws = 5, interval_resolution=1000):
+                
+        # number of random samples before starting the optimization
+        self.n_random_draws = n_random_draws 
+
+        # the objective is the function we're trying to optimize
+        self.loss_fn = loss_fn
+        
+        # the bounds tell us the interval of x we can work
+        self.constraints = constraints
+        
+        # interval resolution is defined as how many points we will use to 
+        # represent the posterior sample
+        # we also define the x grid
+        self.interval_resolution = interval_resolution
+        self.X_grid = torch.zeros((4, self.interval_resolution))
+        for i in range(4):
+            self.X_grid[i,:] = torch.linspace(self.constraints[i, 0], self.constraints[:, 1], self.interval_resolution)
+        
+        # also initializing our design matrix and target variable
+        self.X = torch.tensor([]); self.y = torch.tensor([])
+        
+        self.gp_model = GPmodel
+        self.gp_model.eval()
+
+        self.likelihood = likelihood
+        self.likelihood.eval()
+
+    # fitting process
+    def fit(self, hyperparams):
+        gp = self.likelihood(self.gp_model(hyperparams))
+        return gp
+    
+    # process of choosing next point
+    def choose_next_sample(self):
+        
+        # if we do not have enough samples, sample randomly from bounds
+        if self.X.shape[0] < self.n_random_draws:
+            next_sample = np.random.uniform(self.bounds[0], self.bounds[1],1)[0]
+        
+        # if we do, we fit the GP and choose the next point based on the posterior draw minimum
+        else:
+            # 1. Fit the GP to the observations we have
+            self.gp = self.fit(self.X.reshape(-1,1))
+            
+            # 2. Draw one sample (a function) from the posterior
+            posterior_sample = self.gp.sample()
+            
+            # 3. Choose next point as the optimum of the sample
+            which_min = torch.argmin(posterior_sample)
+            next_sample = self.X_grid[which_min]
+        
+            # let us also get the std from the posterior, for visualization purposes
+            posterior_mean, posterior_std = self.gp.predict(self.X_grid.reshape(-1,1))
+        
+        # let us observe the objective and append this new data to our X and y
+        next_observation = self.objective(next_sample)
+        self.X = torch.append(self.X, next_sample)
+        self.y = torch.append(self.y, next_observation)
+        
+        # return everything if possible
+        try:
+            # returning values of interest
+            return self.X, self.y, self.X_grid, posterior_sample, posterior_mean, posterior_std
+        
+        # if not, return whats possible to return
+        except:
+            return (self.X, self.y, self.X_grid, torch.tensor([torch.mean(self.y)]*self.interval_resolution), 
+                    torch.tensor([torch.mean(self.y)]*self.interval_resolution), torch.array([0]*self.interval_resolution))
