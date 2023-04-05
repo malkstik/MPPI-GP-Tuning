@@ -97,6 +97,7 @@ def collect_data_GP(env, controller, dataset_size = 20):
         steps, goal_distance, _ = execute(env, controller, state_0)
         # Add cost to data
         data['cost'] = execution_cost(steps, goal_distance)
+        collected_data.append(data)
     #   
 
     # ---
