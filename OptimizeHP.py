@@ -30,9 +30,9 @@ Once we have enough, until we see small change in performance, Fit GP to observa
 
 
 
-pushing_multistep_residual_dynamics_model = ResidualDynamicsModel(3,3)
-model_path = os.path.join('pushing_multi_step_residual_dynamics_model.pt')
-pushing_multistep_residual_dynamics_model.load_state_dict(torch.load(model_path))
+# pushing_multistep_residual_dynamics_model = ResidualDynamicsModel(3,3)
+# model_path = os.path.join('pushing_multi_step_residual_dynamics_model.pt')
+# pushing_multistep_residual_dynamics_model.load_state_dict(torch.load(model_path))
 
 
 
@@ -55,7 +55,7 @@ def execution_cost(i, goal_distance):
     cost = i + 10*goal_distance 
     return cost
 
-def collect_data_GP(env, controller, dataset_size = 120):
+def collect_data_GP(env, controller, dataset_size = 20):
     """
     Collect data from the provided environment using uniformly random exploration.
     :param env: Gym Environment instance.
@@ -81,20 +81,18 @@ def collect_data_GP(env, controller, dataset_size = 120):
         pbar.set_description(f'Iteration: {i:.0f}')
         state_0 = env.reset()
         data = {}
-        data['hyperparameters'] = np.zeros(5, dtype = np.float32) #noise_sigma, lambda_value, x, y, theta
+        data['hyperparameters'] = np.zeros(4, dtype = np.float32) #noise_sigma, lambda_value, x, y, theta
         data['cost'] = 0
         # Randomly Sample Hyperparameter values
         data['hyperparameters'][0] = np.random.uniform(0, 2)
         data['hyperparameters'][1] = np.random.uniform(0, 0.015)
         data['hyperparameters'][2] = np.random.uniform(0, 2)
-        data['hyperparameters'][3] = np.random.uniform(0, 2)
-        data['hyperparameters'][4] = np.random.uniform(0, 1)
+        data['hyperparameters'][3] = np.random.uniform(0, 1)
         #Should we also consider changing horizon?
         # Simulate using these hyperparameters
         controller.mppi.noise_sigma = data['hyperparameters'][0]
         controller.lambda_ = data['hyperparameters'][1]
-        controller.x_weight = data['hyperparameters'][2]
-        controller.y_weight = data['hyperparameters'][3]
+        controller.linear_weight = data['hyperparameters'][2]
         controller.theta_weight = data['hyperparameters'][3]
         steps, goal_distance, _ = execute(env, controller, state_0)
         # Add cost to data

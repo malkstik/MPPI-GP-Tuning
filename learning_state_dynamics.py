@@ -388,7 +388,7 @@ class ResidualDynamicsModel(nn.Module):
         return next_state
 
 
-def free_pushing_cost_function(state, action, Q, env):
+def free_pushing_cost_function(state, action, Q):
     """
     Compute the state cost for MPPI on a setup without obstacles.
     :param state: torch tensor of shape (B, state_size)
@@ -404,8 +404,8 @@ def free_pushing_cost_function(state, action, Q, env):
     state_diff = torch.unsqueeze((state-target_pose), -1)
     cost = torch.sum(torch.einsum('bij,jk,bik->bi', state_diff, Q, state_diff), dim=1)
     #Rule out impossible actions
-    if not env.check_action_valid(action.detach().cpu().numpy()):
-        cost = 200
+    # if not env.check_action_valid(action.detach().cpu().numpy()):
+    #     cost = 200
     # ---
     return cost
 
@@ -482,7 +482,7 @@ def collision_detection(state, obs_centre):
     # ---
     return in_collision
 
-def obstacle_avoidance_pushing_cost_function(state, action, OBSTACLE_CENTRE, Q, env):
+def obstacle_avoidance_pushing_cost_function(state, action, OBSTACLE_CENTRE, Q):
     """
     Compute the state cost for MPPI on a setup with obstacles.
     :param state: torch tensor of shape (B, state_size)
@@ -493,7 +493,7 @@ def obstacle_avoidance_pushing_cost_function(state, action, OBSTACLE_CENTRE, Q, 
     cost = None
     # --- Your code here
     B = action.shape[0]
-    cost = free_pushing_cost_function(state, action, Q, env)
+    cost = free_pushing_cost_function(state, action, Q)
     
     #Check for collisions and penalize
     in_collision = torch.zeros((B), dtype= bool)
@@ -532,7 +532,7 @@ class PushingController(object):
                          cost_function, 
                          state_dim, 
                          noise_sigma,
-                         env, env.OBSTACLE_CENTRE,
+                         env.OBSTACLE_CENTRE,
                          num_samples=num_samples,
                          horizon=horizon,
                          lambda_=lambda_value,

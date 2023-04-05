@@ -90,7 +90,7 @@ class MPPI():
     based off of https://github.com/ferreirafabio/mppi_pendulum
     """
 
-    def __init__(self, dynamics, running_cost, nx, noise_sigma, env, OBSTACLE_CENTRE, num_samples=100, horizon=15, device="cpu",
+    def __init__(self, dynamics, running_cost, nx, noise_sigma, OBSTACLE_CENTRE, num_samples=100, horizon=15, device="cpu",
                  terminal_state_cost=None,
                  lambda_=1.,
                  noise_mu=None,
@@ -106,8 +106,7 @@ class MPPI():
                  rollout_var_discount=0.95,
                  sample_null_action=False,
                  noise_abs_cost=False,
-                 x_weight = 1,
-                 y_weight = 1,
+                 linear_weight = 1,
                  theta_weight = 0.1
                  ):
         """
@@ -205,18 +204,16 @@ class MPPI():
 
         #ADJUSTMENTS FROM AARON
         self.obs_center = OBSTACLE_CENTRE
-        self.x_weight = x_weight
-        self.y_weight = y_weight
+        self.linear_weight = linear_weight
         self.theta_weight = theta_weight
-        self.env = env
 
     @handle_batch_input(n=2)
     def _dynamics(self, state, u, t):
         return self.F(state, u, t) if self.step_dependency else self.F(state, u)
 
     @handle_batch_input(n=2)
-    def _running_cost(self, state, u, obs_center, Q, env):
-        return self.running_cost(state, u, obs_center, Q, env)
+    def _running_cost(self, state, u, obs_center, Q):
+        return self.running_cost(state, u, obs_center, Q)
 
     def command(self, state):
         """
@@ -272,13 +269,13 @@ class MPPI():
 
         states = []
         actions = []
-        Q = np.diag([self.x_weight, self.y_weight, self.theta_weight])
+        Q = np.diag([self.linear_weight, self.linear_weight, self.theta_weight])
         for t in range(T):
             u = self.u_scale * perturbed_actions[:, t].repeat(self.M, 1, 1)
             state = self._dynamics(state, u, t)
             
             #COST FUNCTION
-            c = self._running_cost(state, u, self.obs_center, Q, self.env)
+            c = self._running_cost(state, u, self.obs_center, Q)
             
             cost_samples += c
             if self.M > 1:
