@@ -111,16 +111,16 @@ class RBF_GP(gpytorch.models.ExactGP):
         self.mean_module = None
         self.covar_module = None
         # --- Your code here
-        self.mean_module = gpytorch.means.ZeroMean(torch.Size([5]))
+        self.mean_module = gpytorch.means.ConstantMean(batch_shape=torch.Size([4]))
         self.covar_module = gpytorch.kernels.ScaleKernel(
-            gpytorch.kernels.RBFKernel(batch_shape=torch.Size([5]), ard_num_dims = 5),
-            batch_shape=torch.Size([5])
+            gpytorch.kernels.RBFKernel(batch_shape=torch.Size([4]), ard_num_dims = 4),
+            batch_shape=torch.Size([4])
         )
         # ---
     def forward(self, x):
         """
         Args:
-            x: torch.tensor of shape (B, 5) concatenated state and action
+            x: torch.tensor of shape (B, 4) containing all hyperparameters
 
         Returns: gpytorch.distributions.MultitaskMultivariateNormal - Gaussian prediction for next state
 
@@ -146,8 +146,8 @@ def train_gp_hyperparams(model, likelihood, hyperparameters, cost, lr):
     Args:
         model: gpytorch.model.ExactGP model
         likelihood: gpytorch likelihood
-        hyperparameters: (N, 5) torch.tensor of hyperpameters
-        train_next_states: (N,) torch.tensor of cost due to hyperpameters
+        hyperparameters: (N, 4) torch.tensor of hyperparameters
+        cost: (N,) torch.tensor of cost due to hyperparameters
         lr: Learning rate
 
     """
@@ -187,9 +187,9 @@ class ThompsonSamplingGP:
         # represent the posterior sample
         # we also define the x grid
         self.interval_resolution = interval_resolution
-        self.X_grid = torch.zeros((4, self.interval_resolution))
+        self.X_grid = torch.zeros((self.interval_resolution, 4))
         for i in range(4):
-            self.X_grid[i,:] = torch.linspace(self.constraints[i, 0], self.constraints[:, 1], self.interval_resolution)
+            self.X_grid[:,i] = torch.linspace(self.constraints[i, 0], self.constraints[:, 1], self.interval_resolution)
         
         # also initializing our design matrix and target variable
         self.X = torch.tensor([]); self.y = torch.tensor([])
