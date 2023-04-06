@@ -231,7 +231,7 @@ class ThompsonSamplingGP:
 
             # 2. Choose next point as the optimum of the sample
             which_min = torch.argmin(posterior_sample)
-            next_sample = self.X_grid[which_min]
+            next_sample = self.X[which_min]
         
         # let us observe the objective and append this new data to our X and y
         next_observation = torch.tensor(self.evaluate(next_sample))
