@@ -111,10 +111,9 @@ class RBF_GP(gpytorch.models.ExactGP):
         self.mean_module = None
         self.covar_module = None
         # --- Your code here
-        self.mean_module = gpytorch.means.ConstantMean(batch_shape=torch.Size([4]))
+        self.mean_module = gpytorch.means.ConstantMean()
         self.covar_module = gpytorch.kernels.ScaleKernel(
-            gpytorch.kernels.RBFKernel(batch_shape=torch.Size([4]), ard_num_dims = 4),
-            batch_shape=torch.Size([4])
+            gpytorch.kernels.RBFKernel(ard_nums_dims = 4)
         )
         # ---
     def forward(self, x):
@@ -127,9 +126,10 @@ class RBF_GP(gpytorch.models.ExactGP):
         """
         mean_x = self.mean_module.forward(x)
         covar_x = self.covar_module(x)
-        return gpytorch.distributions.MultitaskMultivariateNormal.from_batch_mvn(
-            gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
-        )
+        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
+        # return gpytorch.distributions.MultitaskMultivariateNormal.from_batch_mvn(
+        #     gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
+        # )
     
     def predict(self, x):
         pred = self.likelihood(self.forward(x))
