@@ -103,7 +103,6 @@ def collect_data_GP(env, controller, dataset_size = 20):
     # ---
     return collected_data
 
-
 class RBF_GP(gpytorch.models.ExactGP):
 
     def __init__(self, train_x, train_y, likelihood):
@@ -138,7 +137,6 @@ class RBF_GP(gpytorch.models.ExactGP):
 
         return pred_mu, pred_sigma
 
-
 def train_gp_hyperparams(model, likelihood, hyperparameters, cost, lr):
     
     """
@@ -152,7 +150,7 @@ def train_gp_hyperparams(model, likelihood, hyperparameters, cost, lr):
 
     """
     # --- Your code here
-    training_iter = 115
+    training_iter = 4000
     model.train()
     likelihood.train()
 
@@ -172,13 +170,10 @@ def train_gp_hyperparams(model, likelihood, hyperparameters, cost, lr):
 
 class ThompsonSamplingGP:
     
-    def __init__(self, GPmodel, likelihood, loss_fn, constraints, n_random_draws = 5, interval_resolution=1000):
+    def __init__(self, GPmodel, likelihood, constraints, env, controller, n_random_draws = 5, interval_resolution=1000):
                 
         # number of random samples before starting the optimization
         self.n_random_draws = n_random_draws 
-
-        # the objective is the function we're trying to optimize
-        self.loss_fn = loss_fn
         
         # the bounds tell us the interval of x we can work
         self.constraints = constraints
@@ -189,7 +184,7 @@ class ThompsonSamplingGP:
         self.interval_resolution = interval_resolution
         self.X_grid = torch.zeros((self.interval_resolution, 4))
         for i in range(4):
-            self.X_grid[:,i] = torch.linspace(self.constraints[i, 0], self.constraints[:, 1], self.interval_resolution)
+            self.X_grid[:,i] = torch.linspace(self.constraints[i, 0], self.constraints[i, 1], self.interval_resolution)
         
         # also initializing our design matrix and target variable
         self.X = torch.tensor([]); self.y = torch.tensor([])
@@ -200,44 +195,66 @@ class ThompsonSamplingGP:
         self.likelihood = likelihood
         self.likelihood.eval()
 
-    # fitting process
-    def fit(self, hyperparams):
-        gp = self.likelihood(self.gp_model(hyperparams))
-        return gp
+        self.env = env
+        self.controller = controller
+
+        self.first = True
     
+    def evaluate(self, sample):
+        #Change controller hyperparameters
+        self.controller.mppi.noise_sigma = sample[0]
+        self.controller.lambda_ = sample[1]
+        self.controller.linear_weight = sample[2]
+        self.controller.theta_weight = sample[3]
+
+        #Simulate
+        state_0 = self.env.reset()
+        i, goal_distance, _ = execute(self.env, self.controller, state_0)
+        
+        #Retrieve cost
+        cost = execution_cost(i, goal_distance)
+        return cost 
+
     # process of choosing next point
     def choose_next_sample(self):
         
         # if we do not have enough samples, sample randomly from bounds
         if self.X.shape[0] < self.n_random_draws:
-            next_sample = np.random.uniform(self.bounds[0], self.bounds[1],1)[0]
-        
+            next_sample = np.random.uniform(self.constraints[:,0], self.constraints[:,1])
+            next_sample = torch.from_numpy(next_sample)
+
         # if we do, we fit the GP and choose the next point based on the posterior draw minimum
         else:
-            # 1. Fit the GP to the observations we have
-            self.gp = self.fit(self.X.reshape(-1,1))
-            
-            # 2. Draw one sample (a function) from the posterior
-            posterior_sample = self.gp.sample()
-            
-            # 3. Choose next point as the optimum of the sample
+            # 1. Fit the GP and draw one sample (a function) from the posterior
+            posterior_mean, posterior_std = self.gp_model.predict(self.X)
+            posterior_sample = posterior_mean + posterior_std*torch.randn_like(posterior_mean)
+
+            # 2. Choose next point as the optimum of the sample
             which_min = torch.argmin(posterior_sample)
             next_sample = self.X_grid[which_min]
         
-            # let us also get the std from the posterior, for visualization purposes
-            posterior_mean, posterior_std = self.gp.predict(self.X_grid.reshape(-1,1))
-        
         # let us observe the objective and append this new data to our X and y
-        next_observation = self.objective(next_sample)
-        self.X = torch.append(self.X, next_sample)
-        self.y = torch.append(self.y, next_observation)
+        next_observation = torch.tensor(self.evaluate(next_sample))
+        if self.first:
+            self.X = next_sample
+            self.y = next_observation
+            self.first = False
+        else:
+            self.X = torch.vstack((self.X, next_sample))
+            self.y = torch.vstack((self.y, next_observation))
+
+        # # return everything if possible
+        # try:
+        #     # returning values of interest
+        #     return self.X, self.y, self.X_grid, posterior_sample, posterior_mean, posterior_std
         
-        # return everything if possible
-        try:
-            # returning values of interest
-            return self.X, self.y, self.X_grid, posterior_sample, posterior_mean, posterior_std
-        
-        # if not, return whats possible to return
-        except:
-            return (self.X, self.y, self.X_grid, torch.tensor([torch.mean(self.y)]*self.interval_resolution), 
-                    torch.tensor([torch.mean(self.y)]*self.interval_resolution), torch.array([0]*self.interval_resolution))
+        # # if not, return whats possible to return
+        # except:
+        #     return (self.X, self.y, self.X_grid, torch.tensor([torch.mean(self.y)]*self.interval_resolution), 
+        #             torch.tensor([torch.mean(self.y)]*self.interval_resolution), torch.array([0]*self.interval_resolution))
+
+    def getOptimalParameters(self, iter = 30):
+        for n in range(iter):
+            self.choose_next_sample()
+        self.first = True
+        return self.X[-1], self.y[-1]

@@ -522,8 +522,6 @@ class PushingController(object):
         state_dim = env.observation_space.shape[0]
         u_min = torch.from_numpy(env.action_space.low)
         u_max = torch.from_numpy(env.action_space.high)
-        print(u_min)
-        print(u_max)
         noise_sigma = 0.5 * torch.eye(env.action_space.shape[0])
         lambda_value = 0.01
         # ---
