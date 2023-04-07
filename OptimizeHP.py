@@ -133,7 +133,7 @@ class RBF_GP(gpytorch.models.ExactGP):
     def predict(self, x):
         pred = self.likelihood(self.forward(x))
         pred_mu = pred.mean
-        pred_sigma = torch.diag_embed(pred.stddev ** 2)
+        pred_sigma = pred.stddev#torch.diag_embed(pred.stddev ** 2)
 
         return pred_mu, pred_sigma
 
@@ -170,7 +170,7 @@ def train_gp_hyperparams(model, likelihood, hyperparameters, cost, lr):
 
 class ThompsonSamplingGP:
     
-    def __init__(self, GPmodel, likelihood, constraints, env, controller, n_random_draws = 5, interval_resolution=1000):
+    def __init__(self, GPmodel, likelihood, constraints, dynamics_model, prior = None, n_random_draws = 5, interval_resolution=1000, device = 'cpu'):
                 
         # number of random samples before starting the optimization
         self.n_random_draws = n_random_draws 
@@ -182,12 +182,18 @@ class ThompsonSamplingGP:
         # represent the posterior sample
         # we also define the x grid
         self.interval_resolution = interval_resolution
-        self.X_grid = torch.zeros((self.interval_resolution, 4))
+        self.X_grid = torch.zeros((self.interval_resolution, 4)).to(torch.device(device))
         for i in range(4):
             self.X_grid[:,i] = torch.linspace(self.constraints[i, 0], self.constraints[i, 1], self.interval_resolution)
         
         # also initializing our design matrix and target variable
-        self.X = torch.tensor([]); self.y = torch.tensor([])
+        if prior is not None:
+          self.X = prior[0]
+          self.y = prior[1]
+          self.first = False
+        else:
+          self.first = True
+          self.X = torch.tensor([]).to(torch.device(device)); self.y = torch.tensor([]).to(torch.device(device))
         
         self.gp_model = GPmodel
         self.gp_model.eval()
@@ -195,11 +201,13 @@ class ThompsonSamplingGP:
         self.likelihood = likelihood
         self.likelihood.eval()
 
-        self.env = env
-        self.controller = controller
+        self.env = None
+        self.controller = None
+        self.ct = 6
+        self.dynamics_model = dynamics_model
 
-        self.first = True
-    
+        self.device = device
+
     def evaluate(self, sample):
         #Change controller hyperparameters
         self.controller.mppi.noise_sigma = sample[0]
@@ -217,11 +225,11 @@ class ThompsonSamplingGP:
 
     # process of choosing next point
     def choose_next_sample(self):
-        
+        self.makeModels()
         # if we do not have enough samples, sample randomly from bounds
         if self.X.shape[0] < self.n_random_draws:
             next_sample = np.random.uniform(self.constraints[:,0], self.constraints[:,1])
-            next_sample = torch.from_numpy(next_sample)
+            next_sample = torch.from_numpy(next_sample).to(torch.device(self.device))
 
         # if we do, we fit the GP and choose the next point based on the posterior draw minimum
         else:
@@ -229,9 +237,11 @@ class ThompsonSamplingGP:
             posterior_mean, posterior_std = self.gp_model.predict(self.X)
             posterior_sample = posterior_mean + posterior_std*torch.randn_like(posterior_mean)
 
+            posterior_sample = posterior_sample.to(torch.device(self.device))
+
             # 2. Choose next point as the optimum of the sample
             which_min = torch.argmin(posterior_sample)
-            next_sample = self.X[which_min]
+            next_sample = self.X[which_min, :]
         
         # let us observe the objective and append this new data to our X and y
         next_observation = torch.tensor(self.evaluate(next_sample))
@@ -243,6 +253,9 @@ class ThompsonSamplingGP:
             self.X = torch.vstack((self.X, next_sample))
             self.y = torch.vstack((self.y, next_observation))
 
+        # print(next_sample)
+        # print(next_observation)
+        # print('')
         # # return everything if possible
         # try:
         #     # returning values of interest
@@ -253,8 +266,21 @@ class ThompsonSamplingGP:
         #     return (self.X, self.y, self.X_grid, torch.tensor([torch.mean(self.y)]*self.interval_resolution), 
         #             torch.tensor([torch.mean(self.y)]*self.interval_resolution), torch.array([0]*self.interval_resolution))
 
-    def getOptimalParameters(self, iter = 30):
-        for n in range(iter):
+    def makeModels(self):
+      # print(self.ct)
+      if self.ct <= 5:
+        self.ct += 1
+      else:
+        del self.env, self.controller
+        self.env = PandaPushingEnv(visualizer=None, render_non_push_motions=False,  include_obstacle=True, camera_heigh=800, camera_width=800, render_every_n_steps=20)
+        self.env.reset()
+        self.controller = PushingController(self.env, self.dynamics_model,
+                        obstacle_avoidance_pushing_cost_function, num_samples=1000, horizon=20)
+        self.ct = 0
+      
+    def getOptimalParameters(self, iter = 15):
+        pbar = tqdm(range(iter))
+        for n in pbar:
             self.choose_next_sample()
-        self.first = True
-        return self.X[-1], self.y[-1]
+        bestIdx = torch.argmin(self.y)
+        return self.X[bestIdx], self.y[bestIdx]
