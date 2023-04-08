@@ -50,12 +50,14 @@ def execute(env, controller, state_0, num_steps_max = 20):
     goal_reached = goal_distance < BOX_SIZE
     return i, goal_distance, goal_reached
 
-def execution_cost(i, goal_distance):
+def execution_cost(i, goal_distance, goal_reached):
     # A far distance is 0.4, A pass can get something like .06
     cost = i + 10*goal_distance 
+    if not goal_reached:
+        cost += 15
     return cost
 
-def collect_data_GP(env, controller, dataset_size = 20):
+def collect_data_GP(env, controller, dataset_size = 500):
     """
     Collect data from the provided environment using uniformly random exploration.
     :param env: Gym Environment instance.
@@ -94,9 +96,9 @@ def collect_data_GP(env, controller, dataset_size = 20):
         controller.lambda_ = data['hyperparameters'][1]
         controller.linear_weight = data['hyperparameters'][2]
         controller.theta_weight = data['hyperparameters'][3]
-        steps, goal_distance, _ = execute(env, controller, state_0)
+        steps, goal_distance, goal_reached = execute(env, controller, state_0)
         # Add cost to data
-        data['cost'] = execution_cost(steps, goal_distance)
+        data['cost'] = execution_cost(steps, goal_distance, goal_reached)
         collected_data.append(data)
     #   
 
@@ -131,13 +133,14 @@ class RBF_GP(gpytorch.models.ExactGP):
         # )
     
     def predict(self, x):
-        pred = self.likelihood(self.forward(x))
+        with torch.no_grad():
+            pred = self.likelihood(self.forward(x))
         pred_mu = pred.mean
         pred_sigma = pred.stddev#torch.diag_embed(pred.stddev ** 2)
 
         return pred_mu, pred_sigma
 
-def train_gp_hyperparams(model, likelihood, hyperparameters, cost, lr):
+def train_gp_hyperparams(model, likelihood, hyperparameters, cost, lr = 0.1, mute = False):
     
     """
         Function which optimizes the GP Kernel & likelihood hyperparameters
@@ -150,7 +153,7 @@ def train_gp_hyperparams(model, likelihood, hyperparameters, cost, lr):
 
     """
     # --- Your code here
-    training_iter = 4000
+    training_iter = 2000
     model.train()
     likelihood.train()
 
@@ -164,13 +167,15 @@ def train_gp_hyperparams(model, likelihood, hyperparameters, cost, lr):
         # Calc loss and backprop gradients
         loss = -mll(output, cost)
         loss.backward()
-        print('Iter %d/%d - Loss: %.3f' % (i + 1, training_iter, loss.item()))
+        if not mute:
+            print('Iter %d/%d - Loss: %.3f' % (i + 1, training_iter, loss.item()))
         optimizer.step()
     # ---
 
 class ThompsonSamplingGP:
     
-    def __init__(self, GPmodel, likelihood, constraints, dynamics_model, prior = None, n_random_draws = 5, interval_resolution=1000, device = 'cpu'):
+    def __init__(self, state_dict, likelihood, constraints, dynamics_model, train_x, train_y,
+                prior = None, n_random_draws = 5, interval_resolution=1000, device = 'cpu'):
                 
         # number of random samples before starting the optimization
         self.n_random_draws = n_random_draws 
@@ -195,18 +200,31 @@ class ThompsonSamplingGP:
           self.first = True
           self.X = torch.tensor([]).to(torch.device(device)); self.y = torch.tensor([]).to(torch.device(device))
         
-        self.gp_model = GPmodel
-        self.gp_model.eval()
-
+        # parameters for fitting a GP
+        self.state_dict = state_dict
         self.likelihood = likelihood
         self.likelihood.eval()
 
-        self.env = None
-        self.controller = None
-        self.ct = 6
-        self.dynamics_model = dynamics_model
+        # create environment and controller for evaluating cost
+        self.env = PandaPushingEnv(visualizer=None, render_non_push_motions=False,  include_obstacle=True, camera_heigh=800, camera_width=800, render_every_n_steps=20)
+        self.env.reset()
+        self.controller = PushingController(self.env, dynamics_model,
+                        obstacle_avoidance_pushing_cost_function, num_samples=1000, horizon=30)
 
+        # device to run on
         self.device = device
+
+        # store training data for retraining
+        self.train_x = train_x
+        self.train_y = train_y
+
+    def fit(self, X, y):
+        gp_model = RBF_GP(X, y, self.likelihood)
+        gp_model.load_state_dict(self.state_dict)
+        gp_model.eval()
+        if self.n%10 == 0:
+            self.refineGP()
+        return gp_model
 
     def evaluate(self, sample):
         #Change controller hyperparameters
@@ -225,7 +243,6 @@ class ThompsonSamplingGP:
 
     # process of choosing next point
     def choose_next_sample(self):
-        self.makeModels()
         # if we do not have enough samples, sample randomly from bounds
         if self.X.shape[0] < self.n_random_draws:
             next_sample = np.random.uniform(self.constraints[:,0], self.constraints[:,1])
@@ -234,14 +251,16 @@ class ThompsonSamplingGP:
         # if we do, we fit the GP and choose the next point based on the posterior draw minimum
         else:
             # 1. Fit the GP and draw one sample (a function) from the posterior
-            posterior_mean, posterior_std = self.gp_model.predict(self.X)
+            gp_model = self.fit(self.X, self.y)
+            
+            posterior_mean, posterior_std = gp_model.predict(self.X_grid)
             posterior_sample = posterior_mean + posterior_std*torch.randn_like(posterior_mean)
 
             posterior_sample = posterior_sample.to(torch.device(self.device))
 
             # 2. Choose next point as the optimum of the sample
             which_min = torch.argmin(posterior_sample)
-            next_sample = self.X[which_min, :]
+            next_sample = self.X_grid[which_min, :]
         
         # let us observe the objective and append this new data to our X and y
         next_observation = torch.tensor(self.evaluate(next_sample))
@@ -252,35 +271,16 @@ class ThompsonSamplingGP:
         else:
             self.X = torch.vstack((self.X, next_sample))
             self.y = torch.vstack((self.y, next_observation))
-
-        # print(next_sample)
-        # print(next_observation)
-        # print('')
-        # # return everything if possible
-        # try:
-        #     # returning values of interest
-        #     return self.X, self.y, self.X_grid, posterior_sample, posterior_mean, posterior_std
-        
-        # # if not, return whats possible to return
-        # except:
-        #     return (self.X, self.y, self.X_grid, torch.tensor([torch.mean(self.y)]*self.interval_resolution), 
-        #             torch.tensor([torch.mean(self.y)]*self.interval_resolution), torch.array([0]*self.interval_resolution))
-
-    def makeModels(self):
-      # print(self.ct)
-      if self.ct <= 5:
-        self.ct += 1
-      else:
-        del self.env, self.controller
-        self.env = PandaPushingEnv(visualizer=None, render_non_push_motions=False,  include_obstacle=True, camera_heigh=800, camera_width=800, render_every_n_steps=20)
-        self.env.reset()
-        self.controller = PushingController(self.env, self.dynamics_model,
-                        obstacle_avoidance_pushing_cost_function, num_samples=1000, horizon=20)
-        self.ct = 0
       
-    def getOptimalParameters(self, iter = 15):
+    def getOptimalParameters(self, iter = 100):
         pbar = tqdm(range(iter))
-        for n in pbar:
+        for self.n in pbar:
             self.choose_next_sample()
         bestIdx = torch.argmin(self.y)
         return self.X[bestIdx], self.y[bestIdx]
+    
+    def refineGP(self, model, likelihood):
+        retrain_HP = torch.vstack((self.train_x, self.X))
+        retrain_cost = torch.hstack((self.train_y, self.y.squeeze()))
+        train_gp_hyperparams(model, likelihood, retrain_HP, retrain_cost)
+        self.state_dict = model.state_dict()
