@@ -388,7 +388,7 @@ class ResidualDynamicsModel(nn.Module):
         return next_state
 
 
-def free_pushing_cost_function(state, action, Q):
+def free_pushing_cost_function(state, action, OBSTACLE_CENTRE, Q):
     """
     Compute the state cost for MPPI on a setup without obstacles.
     :param state: torch tensor of shape (B, state_size)
@@ -493,11 +493,11 @@ def obstacle_avoidance_pushing_cost_function(state, action, OBSTACLE_CENTRE, Q):
     cost = None
     # --- Your code here
     B = action.shape[0]
-    cost = free_pushing_cost_function(state, action, Q)
+    cost = free_pushing_cost_function(state, action, OBSTACLE_CENTRE, Q)
     
     #Check for collisions and penalize
     in_collision = torch.zeros((B), dtype= bool)
-    for j in range(5):
+    for j in range(3):
         in_collision = torch.logical_or(in_collision, collision_detection(state, OBSTACLE_CENTRE[j]))
     in_collision = torch.where(in_collision, 1, 0).type(torch.float)
     # if torch.min(in_collision) >0:
@@ -513,7 +513,7 @@ class PushingController(object):
     You will just need to implement the dynamics and tune the hyperparameters and cost functions.
     """
 
-    def __init__(self, env, model, cost_function, num_samples=100, horizon=10):
+    def __init__(self, env, model, cost_function, num_samples=100, horizon=15):
         self.env = env
         self.model = model
         self.target_state = None

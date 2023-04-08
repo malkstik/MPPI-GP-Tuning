@@ -19,16 +19,26 @@ assets_dir = os.path.join(hw_dir, 'assets')
 
 BOX_SIZE = 0.1
 
-TARGET_POSE_FREE = np.array([0.8, 0., 0.])
-TARGET_POSE_OBSTACLES = np.array([0.8, -0.1, 0.])
-OBSTACLE_HALFDIMS = np.array([0.025/2, 0.04/2, 0.05])
+TARGET_POSE_FREE = np.array([0.85, -0.1, 0.])
+TARGET_POSE_OBSTACLES = np.array([0.85, -0.1, 0.])
+OBSTACLE_HALFDIMS = np.array([0.05/2, 0.1/2, 0.05])
 #OBSTACLE_ORIENT = np.random.uniform(-np.pi/2, np.pi/2, 5)
-INIT_OBSTACLE_CENTRE = np.array([[0.45, -0.2, 0],
-                            [.5, .15, 0],
-                            [.6, 0., 0],
-                            [.65, 0.2, 0],
-                            [.7, -0.2, 0]])
-PERSONAL_SPACE = 1.2*(2*((OBSTACLE_HALFDIMS[0]**2 + OBSTACLE_HALFDIMS[1]**2 )**0.5)*1.5 + BOX_SIZE)
+# INIT_OBSTACLE_CENTRE = np.array([[0.45, -0.2, 0],
+#                             [.5, .15, 0],
+#                             [.6, 0., 0],
+#                             [.65, 0.2, 0],
+#                             [.7, -0.2, 0]])
+# INIT_OBSTACLE_CENTRE = np.array([[0.45, 0., 0],
+#                                 [.55, 0., 0],
+#                                 [.65, 0., 0],
+#                                 [.75, 0., 0]])
+INIT_OBSTACLE_CENTRE = np.array([[0.625, 0., 0],
+                                [.625, 0., 0],
+                                [.625, 0., 0]])
+VARY_X = 0.225
+VARY_Y = 0.25
+
+PERSONAL_SPACE = 1.05*(((OBSTACLE_HALFDIMS[0]**2 + OBSTACLE_HALFDIMS[1]**2 )**0.5)*2 + BOX_SIZE)
 
 
 class PandaPushingEnv(gym.Env):
@@ -58,9 +68,10 @@ class PandaPushingEnv(gym.Env):
         self.obstacleUid2 = None  # Obstacle object
         self.obstacleUid3 = None  # Obstacle object
         self.obstacleUid4 = None  # Obstacle object
-        self.obstacleUid5 = None  # Obstacle object
-        self.obstacleUids = [self.obstacleUid1 , self.obstacleUid2, self.obstacleUid3, self.obstacleUid4 , self.obstacleUid5]
+        # self.obstacleUid5 = None  # Obstacle object
+        # self.obstacleUids = [self.obstacleUid1 , self.obstacleUid2, self.obstacleUid3, self.obstacleUid4 , self.obstacleUid5]
 
+        self.obstacleUids = [self.obstacleUid1 , self.obstacleUid2, self.obstacleUid3]
         self.object_file_path = os.path.join(assets_dir, "objects/cube/cube.urdf")
         self.target_file_path = os.path.join(assets_dir, "objects/cube/cube.urdf")
         self.obstacle_file_path = os.path.join(assets_dir, "objects/obstacle/obstacle.urdf")
@@ -114,7 +125,7 @@ class PandaPushingEnv(gym.Env):
         self.action_space = spaces.Box(low=np.array([-1, -np.pi * 0.5, 0]),
                                        high=np.array([1, np.pi * 0.5, 1]))  #
         
-        self.setPos = np.array([0.8, -0.1, 0.])
+        self.setPos = None
 
     def reset(self):
         self._set_object_positions()
@@ -144,12 +155,14 @@ class PandaPushingEnv(gym.Env):
         self.OBSTACLE_CENTRE = INIT_OBSTACLE_CENTRE.copy()
         #Add obstacles
         if self.include_obstacle:
-            self.setPos = np.array([[0.8, -0.1, 0.]]) #Init with just the initial object pose
+            self.setPos = np.array([[0.4, 0., 0.],
+                                    [0.85, -0.1, 0.]]) #Init with just the initial object pose and target pose
             i = 0
             fail = 0
-            while self.setPos.shape[0] < 6:
-                random_y = np.random.uniform(-0.17, 0.17)
-                random_x = np.random.uniform(-0.1, 0.1)
+            print(PERSONAL_SPACE)
+            while self.setPos.shape[0] < self.OBSTACLE_CENTRE.shape[0] + 2:
+                random_y = np.random.uniform(-VARY_Y*.8, VARY_Y*.8)
+                random_x = np.random.uniform(-VARY_X, VARY_X)
                 new_pt = self.OBSTACLE_CENTRE[i] + np.array([random_x, random_y, 0])
                
                 if np.min(np.linalg.norm(new_pt[:2]- self.setPos[:,:2], axis = 1)) > PERSONAL_SPACE:
@@ -159,8 +172,10 @@ class PandaPushingEnv(gym.Env):
                 else:
                     fail += 1
                     # Resample and try again
-                    if fail > 50:
-                        self.OBSTACLE_CENTRE = INIT_OBSTACLE_CENTRE
+                    if fail > 500:
+                        self.OBSTACLE_CENTRE = np.array([[0.5, 0.1, 0],
+                                                        [.7, 0.1, 0],
+                                                        [.6, -0., 0]])
                         break
             for i, obstacle in enumerate(self.obstacleUids):
                 #base_orientation = np.array([0., 0., np.sin(OBSTACLE_ORIENT[i] * 0.5), np.cos(OBSTACLE_ORIENT[i] * 0.5)])
