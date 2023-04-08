@@ -159,7 +159,6 @@ class PandaPushingEnv(gym.Env):
                                     [0.85, -0.1, 0.]]) #Init with just the initial object pose and target pose
             i = 0
             fail = 0
-            print(PERSONAL_SPACE)
             while self.setPos.shape[0] < self.OBSTACLE_CENTRE.shape[0] + 2:
                 random_y = np.random.uniform(-VARY_Y*.8, VARY_Y*.8)
                 random_x = np.random.uniform(-VARY_X, VARY_X)
