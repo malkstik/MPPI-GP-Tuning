@@ -635,7 +635,8 @@ class PushingController(object):
         """
         next_state = None
         # --- Your code here
-        next_state = self.model(state,action)
+        with torch.no_grad():
+            next_state = self.model(state,action)
         # ---
         return next_state
 
