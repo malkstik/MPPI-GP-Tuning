@@ -169,13 +169,14 @@ class PandaPushingEnv(gym.Env):
                     self.setPos = np.vstack((self.setPos, new_pt))
                     i += 1
                 else:
-                    fail += 1
-                    # Resample and try again
-                    if fail > 500:
-                        self.OBSTACLE_CENTRE = np.array([[0.5, 0.1, 0],
-                                                        [.7, 0.1, 0],
-                                                        [.6, -0., 0]])
-                        break
+                    pass
+                    # fail += 1
+                    # # Resample and try again
+                    # if fail > 500:
+                    #     self.OBSTACLE_CENTRE = np.array([[0.5, 0.1, 0],
+                    #                                     [.7, 0.1, 0],
+                    #                                     [.6, -0., 0]])
+                    #     break
             for i, obstacle in enumerate(self.obstacleUids):
                 #base_orientation = np.array([0., 0., np.sin(OBSTACLE_ORIENT[i] * 0.5), np.cos(OBSTACLE_ORIENT[i] * 0.5)])
                 obstacle = p.loadURDF(self.obstacle_file_path, basePosition= self.OBSTACLE_CENTRE[i].tolist(), useFixedBase=True)

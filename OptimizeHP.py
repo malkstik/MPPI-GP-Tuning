@@ -170,6 +170,7 @@ def train_gp_hyperparams(model, likelihood, hyperparameters, cost, lr = 0.1, mut
         if not mute:
             print('Iter %d/%d - Loss: %.3f' % (i + 1, training_iter, loss.item()))
         optimizer.step()
+    print('Iter %d/%d - Loss: %.3f' % (i + 1, training_iter, loss.item()))
     # ---
 
 class ThompsonSamplingGP:
@@ -219,11 +220,15 @@ class ThompsonSamplingGP:
         self.train_y = train_y
 
     def fit(self, X, y):
-        gp_model = RBF_GP(X, y, self.likelihood)
-        gp_model.load_state_dict(self.state_dict)
-        gp_model.eval()
-        if self.n%10 == 0:
-            self.refineGP()
+        if (self.n+1)%50 == 0:
+            retrain_HP = torch.vstack((self.train_x, self.X))
+            retrain_cost = torch.hstack((self.train_y, self.y.squeeze()))
+            gp_model = RBF_GP(retrain_HP, retrain_cost, self.likelihood)
+            self.refineGP(gp_model, self.likelihood, retrain_HP, retrain_cost)
+        else:
+            gp_model = RBF_GP(X, y, self.likelihood)
+            gp_model.load_state_dict(self.state_dict)
+            gp_model.eval()
         return gp_model
 
     def evaluate(self, sample):
@@ -235,10 +240,10 @@ class ThompsonSamplingGP:
 
         #Simulate
         state_0 = self.env.reset()
-        i, goal_distance, _ = execute(self.env, self.controller, state_0)
+        i, goal_distance, goal_reached = execute(self.env, self.controller, state_0)
         
         #Retrieve cost
-        cost = execution_cost(i, goal_distance)
+        cost = execution_cost(i, goal_distance, goal_reached)
         return cost 
 
     # process of choosing next point
@@ -272,15 +277,13 @@ class ThompsonSamplingGP:
             self.X = torch.vstack((self.X, next_sample))
             self.y = torch.vstack((self.y, next_observation))
       
-    def getOptimalParameters(self, iter = 100):
+    def getOptimalParameters(self, iter = 500):
         pbar = tqdm(range(iter))
         for self.n in pbar:
             self.choose_next_sample()
         bestIdx = torch.argmin(self.y)
         return self.X[bestIdx], self.y[bestIdx]
     
-    def refineGP(self, model, likelihood):
-        retrain_HP = torch.vstack((self.train_x, self.X))
-        retrain_cost = torch.hstack((self.train_y, self.y.squeeze()))
-        train_gp_hyperparams(model, likelihood, retrain_HP, retrain_cost)
+    def refineGP(self, model, likelihood,retrain_HP, retrain_cost):
+        train_gp_hyperparams(model, likelihood, retrain_HP, retrain_cost, mute=True)
         self.state_dict = model.state_dict()
