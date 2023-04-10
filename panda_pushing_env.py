@@ -36,15 +36,15 @@ INIT_OBSTACLE_CENTRE = np.array([[0.625, 0., 0],
                                 [.625, 0., 0],
                                 [.625, 0., 0]])
 VARY_X = 0.225
-VARY_Y = 0.25
+VARY_Y = 0.17
 
-PERSONAL_SPACE = 1.05*(((OBSTACLE_HALFDIMS[0]**2 + OBSTACLE_HALFDIMS[1]**2 )**0.5)*2 + BOX_SIZE)
+PERSONAL_SPACE = ((OBSTACLE_HALFDIMS[0]**2 + OBSTACLE_HALFDIMS[1]**2 )**0.5)*2 + BOX_SIZE
 
 
 class PandaPushingEnv(gym.Env):
 
     def __init__(self, debug=False, visualizer=None, include_obstacle=False, render_non_push_motions=True,
-                 render_every_n_steps=1, camera_heigh=84, camera_width=84):
+                 render_every_n_steps=1, camera_heigh=84, camera_width=84, obsInit = 0):
         self.debug = debug
         self.visualizer = visualizer
         self.include_obstacle = include_obstacle
@@ -110,7 +110,7 @@ class PandaPushingEnv(gym.Env):
                                      cameraTargetPosition=[0.55, -0.35, 0.2])
 
         self.block_size = BOX_SIZE
-        self.OBSTACLE_CENTRE = INIT_OBSTACLE_CENTRE
+        self.OBSTACLE_CENTRE = INIT_OBSTACLE_CENTRE.copy()
 
         # Motion parameter
         self.lower_z = 0.02
@@ -125,7 +125,11 @@ class PandaPushingEnv(gym.Env):
         self.action_space = spaces.Box(low=np.array([-1, -np.pi * 0.5, 0]),
                                        high=np.array([1, np.pi * 0.5, 1]))  #
         
+
+
+        #CHANGES FROM AARON
         self.setPos = None
+        self.obsInit = obsInit #determines if resetting will randomize to a new configuration or same configuration
 
     def reset(self):
         self._set_object_positions()
@@ -155,43 +159,65 @@ class PandaPushingEnv(gym.Env):
         self.OBSTACLE_CENTRE = INIT_OBSTACLE_CENTRE.copy()
         #Add obstacles
         if self.include_obstacle:
-            self.setPos = np.array([[0.4, 0., 0.],
-                                    [0.85, -0.1, 0.]]) #Init with just the initial object pose and target pose
-            i = 0
-            fail = 0
-            while self.setPos.shape[0] < self.OBSTACLE_CENTRE.shape[0] + 2:
-                random_y = np.random.uniform(-VARY_Y*.8, VARY_Y*.8)
-                random_x = np.random.uniform(-VARY_X, VARY_X)
-                new_pt = self.OBSTACLE_CENTRE[i] + np.array([random_x, random_y, 0])
-               
-                if np.min(np.linalg.norm(new_pt[:2]- self.setPos[:,:2], axis = 1)) > PERSONAL_SPACE:
-                    self.OBSTACLE_CENTRE[i] = new_pt
-                    self.setPos = np.vstack((self.setPos, new_pt))
-                    i += 1
-                else:
-                    pass
-                    # fail += 1
-                    # # Resample and try again
-                    # if fail > 500:
-                    #     self.OBSTACLE_CENTRE = np.array([[0.5, 0.1, 0],
-                    #                                     [.7, 0.1, 0],
-                    #                                     [.6, -0., 0]])
-                    #     break
+            self.init_obstacles(preset = self.obsInit)
             for i, obstacle in enumerate(self.obstacleUids):
-                #base_orientation = np.array([0., 0., np.sin(OBSTACLE_ORIENT[i] * 0.5), np.cos(OBSTACLE_ORIENT[i] * 0.5)])
                 obstacle = p.loadURDF(self.obstacle_file_path, basePosition= self.OBSTACLE_CENTRE[i].tolist(), useFixedBase=True)
-            #self.obstacleUid = p.loadURDF(self.obstacle_file_path, basePosition=OBSTACLE_CENTRE[1], useFixedBase=True)
-            #self.obstacleUid = p.loadURDF(self.obstacle_file_path, basePosition=[.6, 0.2, 0], useFixedBase=True)
-            #self.mazeUid = p.loadURDF(self.maze_file_path, basePosition=[.15, -.1, 0], useFixedBase=True)
 
         p.setCollisionFilterGroupMask(self.targetUid, -1, 0, 0)  # remove collisions with targeUid
         p.setCollisionFilterPair(self.pandaUid, self.targetUid, -1, -1, 0)  # remove collision between robot and target
 
         p.changeVisualShape(self.targetUid, -1, rgbaColor=[0.05, 0.95, 0.05, .1])  # Change color for target
-        #print('Reset Environment')
+
         # get inital state after reset
         state = self.get_state()
         return state
+
+    def init_obstacles(self, preset = 0):
+        self.setPos = np.array([[0.4, 0., 0.],
+                                [0.85, -0.1, 0.]]) #Init with just the initial object pose and target pose
+        i = 0
+        fail = 0
+        if preset == 0:
+            while self.setPos.shape[0] < self.OBSTACLE_CENTRE.shape[0] + 2:
+                VARY_X = 0.225
+                VARY_Y = 1.2*PERSONAL_SPACE
+                random_y = np.random.uniform(-VARY_Y, VARY_Y)
+                random_x = np.random.uniform(-VARY_X, VARY_X)
+                new_pt = INIT_OBSTACLE_CENTRE[i] + np.array([random_x, random_y, 0])
+                
+                #Checking center to center distance is too strict
+                if np.min(np.linalg.norm(new_pt[:2]- self.setPos[:,:2], axis = 1)) > PERSONAL_SPACE:
+                    self.OBSTACLE_CENTRE[i] = new_pt
+                    self.setPos = np.vstack((self.setPos, new_pt))
+                    i += 1
+                else:
+                    fail += 1
+                    # Resample and try again
+                    if fail > 50:
+                        self.OBSTACLE_CENTRE = np.array([[0.796, 0.1, 0],
+                                                        [.555, 0.226, 0],
+                                                        [.542, -0.187, 0]])                                                       
+                        break
+            # print(self.OBSTACLE_CENTRE)
+        elif preset == 1:
+            self.OBSTACLE_CENTRE = np.array([[0.796, 0.1, 0],
+                                            [.555, 0.226, 0],
+                                            [.542, -0.187, 0]])     
+        elif preset == 2:
+            self.OBSTACLE_CENTRE = np.array([[0.650, 0.0225, 0],
+                                            [.531, 0.186, 0],
+                                            [.542, -0.239, 0]])      
+        elif preset == 3:
+            self.OBSTACLE_CENTRE = np.array([[0.639, 0.0636, 0],
+                                            [.555, -0.235, 0],
+                                            [.413, 0.249, 0]])   
+        elif preset == 4:            
+            self.OBSTACLE_CENTRE = np.array([[0.617, -0.098, 0],
+                                            [.841, 0.198, 0],
+                                            [.527, 0.182, 0]])     
+        else:
+            raise ValueError('Choose an integer value between 0 and 4, inclusive, for obsInit!')        
+        # print(self.OBSTACLE_CENTRE)
 
     def step(self, action):
         # check that the action is valid

@@ -5,6 +5,7 @@ from learning_state_dynamics import TARGET_POSE_OBSTACLES, BOX_SIZE, ResidualDyn
 import numpy as np
 from panda_pushing_env import *
 from tqdm import tqdm
+import cma 
 
 #GAME PLAN
 '''
@@ -28,15 +29,6 @@ Once we have enough, until we see small change in performance, Fit GP to observa
 4)run CMA-ES algorithm
 '''
 
-
-
-# pushing_multistep_residual_dynamics_model = ResidualDynamicsModel(3,3)
-# model_path = os.path.join('pushing_multi_step_residual_dynamics_model.pt')
-# pushing_multistep_residual_dynamics_model.load_state_dict(torch.load(model_path))
-
-
-
-
 def execute(env, controller, state_0, num_steps_max = 20):
     state = state_0
     for i in range(num_steps_max):
@@ -58,23 +50,6 @@ def execution_cost(i, goal_distance, goal_reached):
     return cost
 
 def collect_data_GP(env, controller, dataset_size = 500):
-    """
-    Collect data from the provided environment using uniformly random exploration.
-    :param env: Gym Environment instance.
-    :param num_trajectories: <int> number of data to be collected.
-    :param trajectory_length: <int> number of state transitions to be collected
-    :return: collected data: List of dictionaries containing the state-action trajectories.
-    Each trajectory dictionary should have the following structure:
-        {'states': states,
-        'actions': actions}
-    where
-        * states is a numpy array of shape (trajectory_length+1, state_size) containing the states [x_0, ...., x_T]
-        * actions is a numpy array of shape (trajectory_length, actions_size) containing the actions [u_0, ...., u_{T-1}]
-    Each trajectory is:
-        x_0 -> u_0 -> x_1 -> u_1 -> .... -> x_{T-1} -> u_{T_1} -> x_{T}
-        where x_0 is the state after resetting the environment with env.reset()
-    All data elements must be encoded as np.float32.
-    """
     # --- Your code here
     collected_data = []
     pbar = tqdm(range(dataset_size))
@@ -128,9 +103,6 @@ class RBF_GP(gpytorch.models.ExactGP):
         mean_x = self.mean_module.forward(x)
         covar_x = self.covar_module(x)
         return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
-        # return gpytorch.distributions.MultitaskMultivariateNormal.from_batch_mvn(
-        #     gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
-        # )
     
     def predict(self, x):
         with torch.no_grad():
@@ -160,7 +132,8 @@ def train_gp_hyperparams(model, likelihood, hyperparameters, cost, lr = 0.1, mut
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)  # Includes GaussianLikelihood parameters
     mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
     for i in range(training_iter):
-        # Zero gradients from previous iteration
+        # Zero gradients from HP = torch.load(os.path.join('HP.pt'))
+cost = torch.load(os.path.join('cost.pt'))previous iteration
         optimizer.zero_grad()
         # Output from model
         output = model(hyperparameters)
@@ -176,7 +149,7 @@ def train_gp_hyperparams(model, likelihood, hyperparameters, cost, lr = 0.1, mut
 class ThompsonSamplingGP:
     
     def __init__(self, state_dict, likelihood, constraints, dynamics_model, train_x, train_y,
-                prior = None, n_random_draws = 5, interval_resolution=1000, device = 'cpu'):
+                prior = None, n_random_draws = 5, interval_resolution=1000, device = 'cpu', obsInit = 0):
                 
         # number of random samples before starting the optimization
         self.n_random_draws = n_random_draws 
@@ -207,7 +180,8 @@ class ThompsonSamplingGP:
         self.likelihood.eval()
 
         # create environment and controller for evaluating cost
-        self.env = PandaPushingEnv(visualizer=None, render_non_push_motions=False,  include_obstacle=True, camera_heigh=800, camera_width=800, render_every_n_steps=20)
+        self.env = PandaPushingEnv(visualizer=None, render_non_push_motions=False,  include_obstacle=True,
+                                    camera_heigh=800, camera_width=800, render_every_n_steps=20, obsInit = obsInit)
         self.env.reset()
         self.controller = PushingController(self.env, dynamics_model,
                         obstacle_avoidance_pushing_cost_function, num_samples=1000, horizon=30)
@@ -220,16 +194,19 @@ class ThompsonSamplingGP:
         self.train_y = train_y
 
     def fit(self, X, y):
-        if (self.n+1)%50 == 0:
-            retrain_HP = torch.vstack((self.train_x, self.X))
-            retrain_cost = torch.hstack((self.train_y, self.y.squeeze()))
-            gp_model = RBF_GP(retrain_HP, retrain_cost, self.likelihood)
-            self.refineGP(gp_model, self.likelihood, retrain_HP, retrain_cost)
-        else:
-            gp_model = RBF_GP(X, y, self.likelihood)
-            gp_model.load_state_dict(self.state_dict)
-            gp_model.eval()
-        return gp_model
+        gp_model = RBF_GP(X, y, self.likelihood)
+        gp_model.load_state_dict(self.state_dict)
+        gp_model.eval()HP = torch.load(os.path.join('HP.pt'))
+cost = torch.load(os.path.join('cost.pt'))50 == 0:
+    #         retrain_HP = torch.vstack((self.train_x, self.X))
+    #         retrain_cost = torch.hstack((self.train_y, self.y.squeeze()))
+    #         gp_model = RBF_GP(retrain_HP, retrain_cost, self.likelihood)
+    #         self.refineGP(gp_model, self.likelihood, retrain_HP, retrain_cost)
+    #     else:
+    #         gp_model = RBF_GP(X, y, self.likelihood)
+    #         gp_model.load_state_dict(self.state_dict)
+    #         gp_model.eval()
+    #     return gp_model
 
     def evaluate(self, sample):
         #Change controller hyperparameters
@@ -287,3 +264,4 @@ class ThompsonSamplingGP:
     def refineGP(self, model, likelihood,retrain_HP, retrain_cost):
         train_gp_hyperparams(model, likelihood, retrain_HP, retrain_cost, mute=True)
         self.state_dict = model.state_dict()
+
