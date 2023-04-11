@@ -22,16 +22,6 @@ BOX_SIZE = 0.1
 TARGET_POSE_FREE = np.array([0.85, -0.1, 0.])
 TARGET_POSE_OBSTACLES = np.array([0.85, -0.1, 0.])
 OBSTACLE_HALFDIMS = np.array([0.05/2, 0.1/2, 0.05])
-#OBSTACLE_ORIENT = np.random.uniform(-np.pi/2, np.pi/2, 5)
-# INIT_OBSTACLE_CENTRE = np.array([[0.45, -0.2, 0],
-#                             [.5, .15, 0],
-#                             [.6, 0., 0],
-#                             [.65, 0.2, 0],
-#                             [.7, -0.2, 0]])
-# INIT_OBSTACLE_CENTRE = np.array([[0.45, 0., 0],
-#                                 [.55, 0., 0],
-#                                 [.65, 0., 0],
-#                                 [.75, 0., 0]])
 INIT_OBSTACLE_CENTRE = np.array([[0.625, 0., 0],
                                 [.625, 0., 0],
                                 [.625, 0., 0]])
@@ -68,15 +58,15 @@ class PandaPushingEnv(gym.Env):
         self.obstacleUid2 = None  # Obstacle object
         self.obstacleUid3 = None  # Obstacle object
         self.obstacleUid4 = None  # Obstacle object
-        # self.obstacleUid5 = None  # Obstacle object
-        # self.obstacleUids = [self.obstacleUid1 , self.obstacleUid2, self.obstacleUid3, self.obstacleUid4 , self.obstacleUid5]
+        self.obstacleUid5 = None  # Obstacle object
 
-        self.obstacleUids = [self.obstacleUid1 , self.obstacleUid2, self.obstacleUid3]
+        self.obstacleUids = [self.obstacleUid1 , self.obstacleUid2,
+                            self.obstacleUid3, self.obstacleUid4, self.obstacleUid5]
+
         self.object_file_path = os.path.join(assets_dir, "objects/cube/cube.urdf")
         self.target_file_path = os.path.join(assets_dir, "objects/cube/cube.urdf")
         self.obstacle_file_path = os.path.join(assets_dir, "objects/obstacle/obstacle.urdf")
 
-        # self.init_panda_joint_state = [-0.028, 0.853, -0.016, -1.547, 0.017, 2.4, 2.305, 0., 0.]
         self.init_panda_joint_state = np.array([0., 0., 0., -np.pi * 0.5, 0., np.pi * 0.5, 0.])
 
         self.object_start_pose = None
@@ -90,7 +80,6 @@ class PandaPushingEnv(gym.Env):
         self.max_ik_repeat = 50
 
         # Robot always face that direction
-        # self.fixed_orientation = p.getQuaternionFromEuler([0., -math.pi, math.pi / 2.]) # facing towards y
         self.fixed_orientation = p.getQuaternionFromEuler([0., -math.pi, 0.])  # facing towards x
 
         self.delta_step_joint = 0.016
@@ -101,8 +90,6 @@ class PandaPushingEnv(gym.Env):
         self.is_render_on = True
 
         # Render camera setting
-        # self.camera_height = 84
-        # self.camera_width = 84
         self.camera_height = camera_heigh
         self.camera_width = camera_width
 
@@ -160,8 +147,8 @@ class PandaPushingEnv(gym.Env):
         #Add obstacles
         if self.include_obstacle:
             self.init_obstacles(preset = self.obsInit)
-            for i, obstacle in enumerate(self.obstacleUids):
-                obstacle = p.loadURDF(self.obstacle_file_path, basePosition= self.OBSTACLE_CENTRE[i].tolist(), useFixedBase=True)
+            for i, obstacle in enumerate(self.OBSTACLE_CENTRE):
+                self.obstacleUids[i] = p.loadURDF(self.obstacle_file_path, basePosition= obstacle.tolist(), useFixedBase=True)
 
         p.setCollisionFilterGroupMask(self.targetUid, -1, 0, 0)  # remove collisions with targeUid
         p.setCollisionFilterPair(self.pandaUid, self.targetUid, -1, -1, 0)  # remove collision between robot and target
@@ -204,17 +191,26 @@ class PandaPushingEnv(gym.Env):
                                             [.555, 0.226, 0],
                                             [.542, -0.187, 0]])     
         elif preset == 2:
-            self.OBSTACLE_CENTRE = np.array([[0.650, 0.0225, 0],
-                                            [.531, 0.186, 0],
-                                            [.542, -0.239, 0]])      
+            self.OBSTACLE_CENTRE = np.array([[0.58, -0.12, 0],
+                                            [.95, .05, 0],
+                                            [.841, -.25, 0],                                            
+                                            [.527, 0.182, 0],
+                                            [.7, -0.05, 0]                                                                                       
+                                            ])     
         elif preset == 3:
-            self.OBSTACLE_CENTRE = np.array([[0.639, 0.0636, 0],
-                                            [.555, -0.235, 0],
-                                            [.413, 0.249, 0]])   
+            self.OBSTACLE_CENTRE = np.array([[0.58, -0.12, 0],
+                                            [.95, .05, 0],
+                                            [.841, -.25, 0],                                            
+                                            [.527, 0.182, 0],
+                                            [.7, -0.05, 0]                                                                                       
+                                            ])     
         elif preset == 4:            
-            self.OBSTACLE_CENTRE = np.array([[0.617, -0.098, 0],
-                                            [.841, 0.198, 0],
-                                            [.527, 0.182, 0]])     
+            self.OBSTACLE_CENTRE = np.array([[0.58, -0.12, 0],
+                                            [.841, .05, 0],
+                                            [.841, -.25, 0],                                            
+                                            [.527, 0.182, 0],
+                                            [.7, -.25, 0]                                                                                       
+                                            ])     
         else:
             raise ValueError('Choose an integer value between 0 and 4, inclusive, for obsInit!')        
         # print(self.OBSTACLE_CENTRE)
