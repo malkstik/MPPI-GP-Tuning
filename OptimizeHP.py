@@ -58,19 +58,21 @@ def collect_data_GP(env, controller, dataset_size = 500):
         pbar.set_description(f'Iteration: {i:.0f}')
         state_0 = env.reset()
         data = {}
-        data['hyperparameters'] = np.zeros(4, dtype = np.float32) #noise_sigma, lambda_value, x, y, theta
+        data['hyperparameters'] = np.zeros(5, dtype = np.float32) #noise_sigma, lambda_value, x, y, theta
         data['cost'] = 0
         # Randomly Sample Hyperparameter values
-        data['hyperparameters'][0] = np.random.uniform(0, 2)
+        data['hyperparameters'][0] = np.random.uniform(0, 10)
         data['hyperparameters'][1] = np.random.uniform(0, 0.015)
-        data['hyperparameters'][2] = np.random.uniform(0, 2)
-        data['hyperparameters'][3] = np.random.uniform(0, 1)
+        data['hyperparameters'][2] = np.random.uniform(0, 5)
+        data['hyperparameters'][3] = np.random.uniform(0, 5)
+        data['hyperparameters'][4] = np.random.uniform(0, 5)
         #Should we also consider changing horizon?
         # Simulate using these hyperparameters
         controller.mppi.noise_sigma = data['hyperparameters'][0]
         controller.lambda_ = data['hyperparameters'][1]
-        controller.linear_weight = data['hyperparameters'][2]
-        controller.theta_weight = data['hyperparameters'][3]
+        controller.x_weight = data['hyperparameters'][2]
+        controller.y_weight = data['hyperparameters'][3]
+        controller.theta_weight = data['hyperparameters'][4]
         steps, goal_distance, goal_reached = execute(env, controller, state_0)
         # Add cost to data
         data['cost'] = execution_cost(steps, goal_distance, goal_reached)
@@ -89,7 +91,7 @@ class RBF_GP(gpytorch.models.ExactGP):
         # --- Your code here
         self.mean_module = gpytorch.means.ConstantMean()
         self.covar_module = gpytorch.kernels.ScaleKernel(
-            gpytorch.kernels.RBFKernel(ard_nums_dims = 4)
+            gpytorch.kernels.RBFKernel(ard_nums_dims = 5)
         )
         # ---
     def forward(self, x):
@@ -132,8 +134,7 @@ def train_gp_hyperparams(model, likelihood, hyperparameters, cost, lr = 0.1, mut
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)  # Includes GaussianLikelihood parameters
     mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
     for i in range(training_iter):
-        # Zero gradients from HP = torch.load(os.path.join('HP.pt'))
-cost = torch.load(os.path.join('cost.pt'))previous iteration
+        # Zero gradients from previous iteration
         optimizer.zero_grad()
         # Output from model
         output = model(hyperparameters)
@@ -196,8 +197,11 @@ class ThompsonSamplingGP:
     def fit(self, X, y):
         gp_model = RBF_GP(X, y, self.likelihood)
         gp_model.load_state_dict(self.state_dict)
-        gp_model.eval()HP = torch.load(os.path.join('HP.pt'))
-cost = torch.load(os.path.join('cost.pt'))50 == 0:
+        gp_model.eval()
+        return gp_model
+    
+    # def fit(self, X, y):
+    #     if (self.n+1)%50 == 0:
     #         retrain_HP = torch.vstack((self.train_x, self.X))
     #         retrain_cost = torch.hstack((self.train_y, self.y.squeeze()))
     #         gp_model = RBF_GP(retrain_HP, retrain_cost, self.likelihood)
@@ -212,8 +216,9 @@ cost = torch.load(os.path.join('cost.pt'))50 == 0:
         #Change controller hyperparameters
         self.controller.mppi.noise_sigma = sample[0]
         self.controller.lambda_ = sample[1]
-        self.controller.linear_weight = sample[2]
-        self.controller.theta_weight = sample[3]
+        self.controller.x_weight = sample[2]
+        self.controller.y_weight = sample[3]
+        self.controller.theta_weight = sample[4]
 
         #Simulate
         state_0 = self.env.reset()

@@ -204,7 +204,8 @@ class MPPI():
 
         #ADJUSTMENTS FROM AARON
         self.obs_center = OBSTACLE_CENTRE
-        self.linear_weight = linear_weight
+        self.x_weight = linear_weight
+        self.y_weight = linear_weight
         self.theta_weight = theta_weight
 
     @handle_batch_input(n=2)
@@ -268,7 +269,7 @@ class MPPI():
 
         states = []
         actions = []
-        Q = np.diag([self.linear_weight, self.linear_weight, self.theta_weight])
+        Q = np.diag([self.x_weight, self.y_weight, self.theta_weight])
         for t in range(T):
             u = self.u_scale * perturbed_actions[:, t].repeat(self.M, 1, 1)
             state = self._dynamics(state, u, t)
