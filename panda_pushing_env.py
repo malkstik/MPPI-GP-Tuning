@@ -185,11 +185,14 @@ class PandaPushingEnv(gym.Env):
                                                         [.555, 0.226, 0],
                                                         [.542, -0.187, 0]])                                                       
                         break
-            # print(self.OBSTACLE_CENTRE)
+            # print(self.OBSTACLE_CENTRE)   
         elif preset == 1:
-            self.OBSTACLE_CENTRE = np.array([[0.796, 0.1, 0],
-                                            [.555, 0.226, 0],
-                                            [.542, -0.187, 0]])     
+            self.OBSTACLE_CENTRE = np.array([[0.58, 0., 0],
+                                            [0.58, .12, 0],
+                                            [.94, -.25, 0],                                            
+                                            [.58, -0.12, 0],
+                                            [.76, 0., 0]                                                                                       
+                                            ])     
         elif preset == 2:
             self.OBSTACLE_CENTRE = np.array([[0.58, -0.12, 0],
                                             [.95, .05, 0],
@@ -197,14 +200,7 @@ class PandaPushingEnv(gym.Env):
                                             [.527, 0.182, 0],
                                             [.7, -0.05, 0]                                                                                       
                                             ])     
-        elif preset == 3:
-            self.OBSTACLE_CENTRE = np.array([[0.58, -0.12, 0],
-                                            [.95, .05, 0],
-                                            [.841, -.25, 0],                                            
-                                            [.527, 0.182, 0],
-                                            [.7, -0.05, 0]                                                                                       
-                                            ])     
-        elif preset == 4:            
+        elif preset == 3:            
             self.OBSTACLE_CENTRE = np.array([[0.58, -0.12, 0],
                                             [.841, .05, 0],
                                             [.841, -.25, 0],                                            
