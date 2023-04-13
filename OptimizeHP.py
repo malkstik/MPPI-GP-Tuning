@@ -29,7 +29,7 @@ Once we have enough, until we see small change in performance, Fit GP to observa
 4)run CMA-ES algorithm
 '''
 
-def execute(env, controller, state_0, num_steps_max = 20):
+def execute(env, controller, state_0, num_steps_max = 50):
     state = state_0
     for i in range(num_steps_max):
         action = controller.control(state)
@@ -46,7 +46,7 @@ def execution_cost(i, goal_distance, goal_reached):
     # A far distance is 0.4, A pass can get something like .06
     cost = i + 10*goal_distance 
     if not goal_reached:
-        cost += 15
+        cost += 30
     return cost
 
 def collect_data_GP(env, controller, dataset_size = 500):
