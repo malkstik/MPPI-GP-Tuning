@@ -162,8 +162,8 @@ class ThompsonSamplingGP:
         # represent the posterior sample
         # we also define the x grid
         self.interval_resolution = interval_resolution
-        self.X_grid = torch.zeros((self.interval_resolution, 4)).to(torch.device(device))
-        for i in range(4):
+        self.X_grid = torch.zeros((self.interval_resolution, 5)).to(torch.device(device))
+        for i in range(5):
             self.X_grid[:,i] = torch.linspace(self.constraints[i, 0], self.constraints[i, 1], self.interval_resolution)
         
         # also initializing our design matrix and target variable
