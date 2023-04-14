@@ -598,7 +598,7 @@ class PushingController(object):
     You will just need to implement the dynamics and tune the hyperparameters and cost functions.
     """
 
-    def __init__(self, env, model, cost_function, num_samples=500, horizon=15):
+    def __init__(self, env, model, cost_function, num_samples=100, horizon=15):
         self.env = env
         self.model = model
         self.target_state = None
