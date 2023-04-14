@@ -1,6 +1,6 @@
 import gpytorch
 import torch
-from torch.distributions import MultivariateNormal
+from torch.distributions.multivariate_normal import MultivariateNormal
 from learning_state_dynamics import TARGET_POSE_OBSTACLES, BOX_SIZE, ResidualDynamicsModel, PushingController, obstacle_avoidance_pushing_cost_function
 import numpy as np
 from panda_pushing_env import *
@@ -61,15 +61,15 @@ def collect_data_GP(env, controller, dataset_size = 500):
         data['hyperparameters'] = np.zeros(5, dtype = np.float32) #noise_sigma, lambda_value, x, y, theta
         data['cost'] = 0
         # Randomly Sample Hyperparameter values
-        data['hyperparameters'][0] = np.random.uniform(0, 10)
-        data['hyperparameters'][1] = np.random.uniform(0, 0.015)
-        data['hyperparameters'][2] = np.random.uniform(0, 5)
-        data['hyperparameters'][3] = np.random.uniform(0, 5)
-        data['hyperparameters'][4] = np.random.uniform(0, 5)
+        data['hyperparameters'][0] = 10*torch.rand(0, 10)
+        data['hyperparameters'][1] = 0.015*torch.rand(0, 0.015)
+        data['hyperparameters'][2] = 5*torch.rand(0, 10)
+        data['hyperparameters'][3] = 5*torch.rand(0, 10)
+        data['hyperparameters'][4] = 5*torch.rand(0, 10)
         #Should we also consider changing horizon?
         # Simulate using these hyperparameters
         controller.mppi.noise_sigma = data['hyperparameters'][0]
-        controller.mppi.noise_dist = MultivariateNormal(controller.mppi.noise_mu, covariance_matrix=controller.mppi.noise_sigma)
+        controller.mppi.noise_dist = MultivariateNormal(controller.mppi.noise_mu, covariance_matrix=torch.from_numpy(controller.mppi.noise_sigma))
         controller.mppi.lambda_ = data['hyperparameters'][1]
         controller.mppi.x_weight = data['hyperparameters'][2]
         controller.mppi.y_weight = data['hyperparameters'][3]
@@ -200,23 +200,11 @@ class ThompsonSamplingGP:
         gp_model.load_state_dict(self.state_dict)
         gp_model.eval()
         return gp_model
-    
-    # def fit(self, X, y):
-    #     if (self.n+1)%50 == 0:
-    #         retrain_HP = torch.vstack((self.train_x, self.X))
-    #         retrain_cost = torch.hstack((self.train_y, self.y.squeeze()))
-    #         gp_model = RBF_GP(retrain_HP, retrain_cost, self.likelihood)
-    #         self.refineGP(gp_model, self.likelihood, retrain_HP, retrain_cost)
-    #     else:
-    #         gp_model = RBF_GP(X, y, self.likelihood)
-    #         gp_model.load_state_dict(self.state_dict)
-    #         gp_model.eval()
-    #     return gp_model
 
     def evaluate(self, sample):
         #Change controller hyperparameters
         self.controller.mppi.noise_sigma = sample[0]*torch.eye(self.env.action_space.shape[0])
-        self.controller.mppi.noise_dist = MultivariateNormal(self.controller.mppi.noise_mu, covariance_matrix=self.mppi.controller.noise_sigma)
+        self.controller.mppi.noise_dist = MultivariateNormal(self.controller.mppi.noise_mu, covariance_matrix=torch.from_numpy(self.mppi.controller.noise_sigma))
         self.controller.mppi.lambda_ = sample[1]
         self.controller.mppi.x_weight = sample[2]
         self.controller.mppi.y_weight = sample[3]

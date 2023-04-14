@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cma
 
+from torch.distributions.multivariate_normal import MultivariateNormal
 from numpngw import write_apng
 from IPython.display import Image
 from tqdm.notebook import tqdm
@@ -118,7 +119,9 @@ def run_TS(train_x, train_y, obsInit):
 
 def CMA_evaluate(hyperparameters):
     #Change controller hyperparameters
-    CMA_CONTROLLER.mppi.noise_sigma = hyperparameters[0]
+    hyperparameters = torch.from_numpy(hyperparameters)
+
+    CMA_CONTROLLER.mppi.noise_sigma = hyperparameters[0]*torch.eye(CMA_ENV.action_space.shape[0])
     CMA_CONTROLLER.mppi.noise_dist = MultivariateNormal(CMA_CONTROLLER.mppi.noise_mu, covariance_matrix=CMA_CONTROLLER.mppi.noise_sigma)
     CMA_CONTROLLER.mppi.lambda_ = hyperparameters[1]
     CMA_CONTROLLER.mppi.x_weight = hyperparameters[2]
@@ -137,8 +140,8 @@ def run_CMA(obsInit):
     CMA_ENV.obsInit = obsInit
     opts = cma.CMAOptions()
     opts.set("bounds", [[0, 0, 0, 0, 0], [None, None, None, None, None]])
-    res = cma.fmin(CMA_evaluate, 5 * [1], 1, opts)
-    es = cma.CMAEvolutionStrategy(5 * [1], 1).optimize(CMA_evaluate)
+    res = cma.fmin(CMA_evaluate, [0.5, 0.01, 1, 1, 0.1], 1, opts)
+    es = cma.CMAEvolutionStrategy([0.5, 0.01, 1, 1, 0.1], 1).optimize(CMA_evaluate)
 
 def evalHP(hyperparameters, trials, obsInit):
     env = PandaPushingEnv(visualizer=None, render_non_push_motions=False,  include_obstacle=True,
