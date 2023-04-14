@@ -69,10 +69,11 @@ def collect_data_GP(env, controller, dataset_size = 500):
         #Should we also consider changing horizon?
         # Simulate using these hyperparameters
         controller.mppi.noise_sigma = data['hyperparameters'][0]
-        controller.lambda_ = data['hyperparameters'][1]
-        controller.x_weight = data['hyperparameters'][2]
-        controller.y_weight = data['hyperparameters'][3]
-        controller.theta_weight = data['hyperparameters'][4]
+        controller.mppi.noise_dist = MultivariateNormal(controller.mppi.noise_mu, covariance_matrix=controller.mppi.noise_sigma)
+        controller.mppi.lambda_ = data['hyperparameters'][1]
+        controller.mppi.x_weight = data['hyperparameters'][2]
+        controller.mppi.y_weight = data['hyperparameters'][3]
+        controller.mppi.theta_weight = data['hyperparameters'][4]
         steps, goal_distance, goal_reached = execute(env, controller, state_0)
         # Add cost to data
         data['cost'] = execution_cost(steps, goal_distance, goal_reached)
@@ -215,10 +216,11 @@ class ThompsonSamplingGP:
     def evaluate(self, sample):
         #Change controller hyperparameters
         self.controller.mppi.noise_sigma = sample[0]*torch.eye(self.env.action_space.shape[0])
-        self.controller.lambda_ = sample[1]
-        self.controller.x_weight = sample[2]
-        self.controller.y_weight = sample[3]
-        self.controller.theta_weight = sample[4]
+        self.controller.mppi.noise_dist = MultivariateNormal(self.controller.mppi.noise_mu, covariance_matrix=self.mppi.controller.noise_sigma)
+        self.controller.mppi.lambda_ = sample[1]
+        self.controller.mppi.x_weight = sample[2]
+        self.controller.mppi.y_weight = sample[3]
+        self.controller.mppi.theta_weight = sample[4]
 
         #Simulate
         state_0 = self.env.reset()

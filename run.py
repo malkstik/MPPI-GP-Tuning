@@ -119,10 +119,11 @@ def run_TS(train_x, train_y, obsInit):
 def CMA_evaluate(hyperparameters):
     #Change controller hyperparameters
     CMA_CONTROLLER.mppi.noise_sigma = hyperparameters[0]
-    CMA_CONTROLLER.lambda_ = hyperparameters[1]
-    CMA_CONTROLLER.x_weight = hyperparameters[2]
-    CMA_CONTROLLER.y_weight = hyperparameters[3]
-    CMA_CONTROLLER.theta_weight = hyperparameters[4]
+    CMA_CONTROLLER.mppi.noise_dist = MultivariateNormal(CMA_CONTROLLER.mppi.noise_mu, covariance_matrix=CMA_CONTROLLER.mppi.noise_sigma)
+    CMA_CONTROLLER.mppi.lambda_ = hyperparameters[1]
+    CMA_CONTROLLER.mppi.x_weight = hyperparameters[2]
+    CMA_CONTROLLER.mppi.y_weight = hyperparameters[3]
+    CMA_CONTROLLER.mppi.theta_weight = hyperparameters[4]
 
     #Simulate
     i, goal_distance, goal_reached = execute(CMA_ENV, CMA_CONTROLLER)
@@ -148,10 +149,11 @@ def evalHP(hyperparameters, trials, obsInit):
                                 obstacle_avoidance_pushing_cost_function, num_samples=1000, horizon=30)
     
     controller.mppi.noise_sigma = hyperparameters[0]
-    controller.lambda_ = hyperparameters[1]
-    controller.x_weight = hyperparameters[2]
-    controller.y_weight = hyperparameters[3]
-    controller.theta_weight = hyperparameters[4]
+    controller.mppi.noise_dist = MultivariateNormal(controller.mppi.noise_mu, covariance_matrix=controller.mppi.noise_sigma)
+    controller.mppi.lambda_ = hyperparameters[1]
+    controller.mppi.x_weight = hyperparameters[2]
+    controller.mppi.y_weight = hyperparameters[3]
+    controller.mppi.theta_weight = hyperparameters[4]
     pbar = tqdm(range(trials))
     success = 0
     for i in pbar:
