@@ -122,6 +122,7 @@ def CMA_evaluate(hyperparameters):
     hyperparameters = torch.from_numpy(hyperparameters)
 
     CMA_CONTROLLER.mppi.noise_sigma = hyperparameters[0]*torch.eye(CMA_ENV.action_space.shape[0])
+    CMA_CONTROLLER.mppi.noise_sigma_inv = torch.inverse(CMA_CONTROLLER.mppi.noise_sigma)
     CMA_CONTROLLER.mppi.noise_dist = MultivariateNormal(CMA_CONTROLLER.mppi.noise_mu, covariance_matrix=CMA_CONTROLLER.mppi.noise_sigma)
     CMA_CONTROLLER.mppi.lambda_ = hyperparameters[1]
     CMA_CONTROLLER.mppi.x_weight = hyperparameters[2]
@@ -139,7 +140,7 @@ def CMA_evaluate(hyperparameters):
 def run_CMA(obsInit):
     CMA_ENV.obsInit = obsInit
     opts = cma.CMAOptions()
-    opts.set("bounds", [[0, 0, 0, 0, 0], [None, None, None, None, None]])
+    opts.set("bounds", [[0, 0, 0, 0, 0], [None, 0.015, 10., 10., 10.]])
     res = cma.fmin(CMA_evaluate, [0.5, 0.01, 1, 1, 0.1], 1, opts)
     es = cma.CMAEvolutionStrategy([0.5, 0.01, 1, 1, 0.1], 1).optimize(CMA_evaluate)
 
@@ -152,6 +153,7 @@ def evalHP(hyperparameters, trials, obsInit):
                                 obstacle_avoidance_pushing_cost_function, num_samples=1000, horizon=30)
     
     controller.mppi.noise_sigma = hyperparameters[0]*torch.eye(env.action_space.shape[0])
+    controller.mppi.noise_sigma_inv = torch.inverse(controller.mppi.noise_sigma)
     controller.mppi.noise_dist = MultivariateNormal(controller.mppi.noise_mu, covariance_matrix=controller.mppi.noise_sigma)
     controller.mppi.lambda_ = hyperparameters[1]
     controller.mppi.x_weight = hyperparameters[2]

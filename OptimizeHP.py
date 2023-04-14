@@ -70,6 +70,7 @@ def collect_data_GP(env, controller, dataset_size = 500):
         #Should we also consider changing horizon?
         # Simulate using these hyperparameters
         controller.mppi.noise_sigma = data['hyperparameters'][0]*torch.eye(env.action_space.shape[0])
+        controller.mppi.noise_sigma_inv = torch.inverse(controller.mppi.noise_sigma)        
         controller.mppi.noise_dist = MultivariateNormal(controller.mppi.noise_mu, covariance_matrix= controller.mppi.noise_sigma)
         controller.mppi.lambda_ = data['hyperparameters'][1]
         controller.mppi.x_weight = data['hyperparameters'][2]
@@ -205,6 +206,7 @@ class ThompsonSamplingGP:
     def evaluate(self, sample):
         #Change controller hyperparameters
         self.controller.mppi.noise_sigma = sample[0]*torch.eye(self.env.action_space.shape[0])
+        self.controller.mppi.noise_sigma_inv = torch.inverse(self.controller.mppi.noise_sigma)
         self.controller.mppi.noise_dist = MultivariateNormal(self.controller.mppi.noise_mu, covariance_matrix=torch.from_numpy(self.mppi.controller.noise_sigma))
         self.controller.mppi.lambda_ = sample[1]
         self.controller.mppi.x_weight = sample[2]
