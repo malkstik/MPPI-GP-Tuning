@@ -58,7 +58,10 @@ def collect_data_GP(env, controller, dataset_size = 500):
         controller.mppi.theta_weight = data['hyperparameters'][4]
         steps, goal_distance, goal_reached = execute(env, controller)
         # Add cost to data
-        data['cost'] = execution_cost(steps, goal_distance, goal_reached)
+        cost = 0
+        for i in range(5):
+            cost += execution_cost(steps, goal_distance, goal_reached)
+        data['cost'] = cost/5
         collected_data.append(data)
     #   
 

@@ -193,21 +193,21 @@ class PandaPushingEnv(gym.Env):
                                             [.58, -0.12, 0],
                                             [.76, 0., 0]                                                                                       
                                             ])     
-        elif preset == 2:
+        elif preset == "DONT USE":
             self.OBSTACLE_CENTRE = np.array([[0.58, -0.12, 0],
                                             [.95, .05, 0],
                                             [.841, -.25, 0],                                            
                                             [.527, 0.182, 0],
                                             [.7, -0.05, 0]                                                                                       
                                             ])     
-        elif preset == 3:            
+        elif preset == 2:            
             self.OBSTACLE_CENTRE = np.array([[0.58, -0.12, 0],
                                             [.841, .05, 0],
                                             [.841, -.25, 0],                                            
                                             [.527, 0.182, 0],
                                             [.7, -.25, 0]                                                                                       
                                             ])     
-        elif preset == 4:
+        elif preset == 3:
             self.OBSTACLE_CENTRE = np.array([[0.58, .02, 0],
                                             [0.58,  .14, 0],
                                             [.58, 0.26, 0],
