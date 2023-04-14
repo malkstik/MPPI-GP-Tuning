@@ -29,8 +29,8 @@ Once we have enough, until we see small change in performance, Fit GP to observa
 4)run CMA-ES algorithm
 '''
 
-def execute(env, controller, state_0, num_steps_max = 50):
-    state = state_0
+def execute(env, controller, num_steps_max = 50):
+    state = env.reset()
     for i in range(num_steps_max):
         action = controller.control(state)
         state, reward, done, _ = env.step(action)
@@ -214,7 +214,7 @@ class ThompsonSamplingGP:
 
     def evaluate(self, sample):
         #Change controller hyperparameters
-        self.controller.mppi.noise_sigma = sample[0]
+        self.controller.mppi.noise_sigma = sample[0]*torch.eye(self.env.action_space.shape[0])
         self.controller.lambda_ = sample[1]
         self.controller.x_weight = sample[2]
         self.controller.y_weight = sample[3]

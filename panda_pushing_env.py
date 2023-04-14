@@ -207,6 +207,11 @@ class PandaPushingEnv(gym.Env):
                                             [.527, 0.182, 0],
                                             [.7, -.25, 0]                                                                                       
                                             ])     
+        elif preset == 4:
+            self.OBSTACLE_CENTRE = np.array([[0.58, .02, 0],
+                                            [0.58,  .14, 0],
+                                            [.58, 0.26, 0],
+                                            ])             
         else:
             raise ValueError('Choose an integer value between 0 and 4, inclusive, for obsInit!')        
         # print(self.OBSTACLE_CENTRE)

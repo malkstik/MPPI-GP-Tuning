@@ -20,12 +20,12 @@ pushing_multistep_residual_dynamics_model.load_state_dict(torch.load(model_path)
 
 CMA_ENV = PandaPushingEnv(visualizer=None, render_non_push_motions=False,  
                     include_obstacle=True, camera_heigh=800, camera_width=800, 
-                    render_every_n_steps=5, obsInit=obsInit)
-state_0 = env.reset()
+                    render_every_n_steps=5)
+state_0 = CMA_ENV.reset()
 state = state_0
-CMA_CONTROLLER = PushingController(env, pushing_multistep_residual_dynamics_model,
+CMA_CONTROLLER = PushingController(CMA_ENV, pushing_multistep_residual_dynamics_model,
                             obstacle_avoidance_pushing_cost_function, 
-                            num_samples=1000, horizon=20)
+                            num_samples=1000, horizon=30)
 
 data_types = ['collected_data_OBS_1.npy',
             'collected_data_OBS_2.npy',
@@ -62,12 +62,14 @@ def collect_data(obsInit):
     controller = PushingController(env, pushing_multistep_residual_dynamics_model,
                             obstacle_avoidance_pushing_cost_function, num_samples=1000, horizon=30)
     collected_data = collect_data_GP(env, controller)
-    np.save(os.path.join(data_types[obsInit-1]), collected_data)   
+    filename = "collected_data_OBS_" + str(obsInit) + ".npy"
+    np.save(os.path.join(filename), collected_data)   
 
     return collected_data
 
 def load_data(obsInit):
-    data = np.load(os.path.join(data_types[obsInit-1]), allow_pickle=True)
+    filename = "collected_data_OBS_" + str(obsInit) + ".npy"
+    data = np.load(os.path.join(filename), allow_pickle=True)
     data = data.reshape(-1)
     collected_data = {}
 
@@ -86,12 +88,14 @@ def train_gp(train_x, train_y, obsInit):
 
     train_gp_hyperparams(model, likelihood, train_x, train_y, mute = True)
 
-    save_path = os.path.join(GP_models[obsInit-1])
+    filename = "RBF_GP_model_OBS_" + str(obsInit) + ".pth"
+    save_path = os.path.join(filename)
     torch.save(model.state_dict(), save_path)    
     return model.state_dict()
 
 def run_TS(train_x, train_y, obsInit):
-    GP_state_dict = torch.load(GP_models[obsInit-1])
+    filename = "RBF_GP_model_OBS_" + str(obsInit) + ".pth"
+    GP_state_dict = torch.load(filename)
     likelihood = gpytorch.likelihoods.GaussianLikelihood()    
     constraints = torch.tensor([[0, 10],
                                 [0, 0.015],
@@ -105,9 +109,10 @@ def run_TS(train_x, train_y, obsInit):
 
     TS_HP = TS.X
     TS_cost = TS.y
-
-    torch.save(TS_HP, os.path.join(TS_results[obsInit-1][0]))
-    torch.save(TS_cost, os.path.join(TS_results[obsInit-1][1]))
+    HP_filename = "HP_OBS_" + obsInit + "1.pt"
+    cost_filename = "cost_OBS_" + obsInit + "1.pt"
+    torch.save(TS_HP, os.path.join(HP_filename))
+    torch.save(TS_cost, os.path.join(cost_filename))
 
     return optimum_hp, optimum_cost
 
@@ -120,8 +125,7 @@ def CMA_evaluate(hyperparameters):
     CMA_CONTROLLER.theta_weight = hyperparameters[4]
 
     #Simulate
-    state_0 = env.reset()
-    i, goal_distance, goal_reached = execute(CMA_ENV, CMA_CONTROLLER, state_0)
+    i, goal_distance, goal_reached = execute(CMA_ENV, CMA_CONTROLLER)
     
     #Retrieve cost
     cost = execution_cost(i, goal_distance, goal_reached)
@@ -129,18 +133,19 @@ def CMA_evaluate(hyperparameters):
 
 
 def run_CMA(obsInit):
+    CMA_ENV.obsInit = obsInit
     opts = cma.CMAOptions()
     opts.set("bounds", [[0, 0, 0, 0, 0], [None, None, None, None, None]])
     res = cma.fmin(CMA_evaluate, 5 * [1], 1, opts)
     es = cma.CMAEvolutionStrategy(5 * [1], 1).optimize(CMA_evaluate)
 
-def evalHP(hyperparameters, trials):
+def evalHP(hyperparameters, trials, obsInit):
     env = PandaPushingEnv(visualizer=None, render_non_push_motions=False,  include_obstacle=True,
-                        camera_heigh=800, camera_width=800, render_every_n_steps=5, obsInit=OBS_INIT)
+                        camera_heigh=800, camera_width=800, render_every_n_steps=5, obsInit=obsInit)
     state_0 = env.reset()
     state = state_0
     controller = PushingController(env, pushing_multistep_residual_dynamics_model,
-                                obstacle_avoidance_pushing_cost_function, num_samples=1000, horizon=20)
+                                obstacle_avoidance_pushing_cost_function, num_samples=1000, horizon=30)
     
     controller.mppi.noise_sigma = hyperparameters[0]
     controller.lambda_ = hyperparameters[1]
@@ -150,11 +155,14 @@ def evalHP(hyperparameters, trials):
     pbar = tqdm(range(trials))
     success = 0
     for i in pbar:
-        _, _, goal_reached = execute(env, controller, state_0)
+        _, _, goal_reached = execute(env, controller)
         if goal_reached:
             success += 1
         pbar.set_description(f'Succeses: {success:.0f} | Total: {i+1:.0f}')
-    print('Sucess Rate: ', success/trials)
+    successRate = success/trials
+    print('Sucess Rate: ', successRate)
+
+    return successRate
 
 if __name__ == "__main__":
     colData = True
