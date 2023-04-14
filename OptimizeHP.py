@@ -61,11 +61,12 @@ def collect_data_GP(env, controller, dataset_size = 500):
         data['hyperparameters'] = np.zeros(5, dtype = np.float32) #noise_sigma, lambda_value, x, y, theta
         data['cost'] = 0
         # Randomly Sample Hyperparameter values
-        data['hyperparameters'][0] = 10*torch.rand(0, 10)
-        data['hyperparameters'][1] = 0.015*torch.rand(0, 0.015)
-        data['hyperparameters'][2] = 5*torch.rand(0, 10)
-        data['hyperparameters'][3] = 5*torch.rand(0, 10)
-        data['hyperparameters'][4] = 5*torch.rand(0, 10)
+        data['hyperparameters'][0] = torch.from_numpy(np.random.uniform(0, 10))
+        data['hyperparameters'][1] = torch.from_numpy(np.random.uniform(0, 0.015))
+        data['hyperparameters'][2] = torch.from_numpy(np.random.uniform(0, 10))
+        data['hyperparameters'][3] = torch.from_numpy(np.random.uniform(0, 10))
+        data['hyperparameters'][4] = torch.from_numpy(np.random.uniform(0, 10))
+
         #Should we also consider changing horizon?
         # Simulate using these hyperparameters
         controller.mppi.noise_sigma = data['hyperparameters'][0]
