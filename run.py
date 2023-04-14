@@ -151,7 +151,7 @@ def evalHP(hyperparameters, trials, obsInit):
     controller = PushingController(env, pushing_multistep_residual_dynamics_model,
                                 obstacle_avoidance_pushing_cost_function, num_samples=1000, horizon=30)
     
-    controller.mppi.noise_sigma = hyperparameters[0]
+    controller.mppi.noise_sigma = hyperparameters[0]*torch.eye(env.action_space.shape[0])
     controller.mppi.noise_dist = MultivariateNormal(controller.mppi.noise_mu, covariance_matrix=controller.mppi.noise_sigma)
     controller.mppi.lambda_ = hyperparameters[1]
     controller.mppi.x_weight = hyperparameters[2]

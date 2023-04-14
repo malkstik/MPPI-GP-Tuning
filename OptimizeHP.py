@@ -58,7 +58,7 @@ def collect_data_GP(env, controller, dataset_size = 500):
         pbar.set_description(f'Iteration: {i:.0f}')
         state_0 = env.reset()
         data = {}
-        data['hyperparameters'] = np.zeros(5, dtype = np.float32) #noise_sigma, lambda_value, x, y, theta
+        data['hyperparameters'] = torch.zeros(5, dtype = np.float32) #noise_sigma, lambda_value, x, y, theta
         data['cost'] = 0
         # Randomly Sample Hyperparameter values
         data['hyperparameters'][0] = torch.from_numpy(np.random.uniform(0, 10))
@@ -69,7 +69,7 @@ def collect_data_GP(env, controller, dataset_size = 500):
 
         #Should we also consider changing horizon?
         # Simulate using these hyperparameters
-        controller.mppi.noise_sigma = data['hyperparameters'][0]
+        controller.mppi.noise_sigma = data['hyperparameters'][0]*torch.eye(env.action_space.shape[0])
         controller.mppi.noise_dist = MultivariateNormal(controller.mppi.noise_mu, covariance_matrix=torch.from_numpy(controller.mppi.noise_sigma))
         controller.mppi.lambda_ = data['hyperparameters'][1]
         controller.mppi.x_weight = data['hyperparameters'][2]
