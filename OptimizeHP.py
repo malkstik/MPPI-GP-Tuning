@@ -8,26 +8,6 @@ from tqdm import tqdm
 import cma 
 
 #GAME PLAN
-'''
-Steps to TS-GP optimization:
-1)generate dataset
-sweep through range of hyperparameters:
-noise_sigma val
-lambda_value
-
-2) train gp hyperparameters over the function:
-cost function vs hyper parameters
-^cost function will have to differ from pushing cost function... likely function of steps necessary and if goal has been reached
-
-issue: current obstacle course can vary difficulty a lot
-
-3)Run TS-GP algorithm with trained GP model
-Sample points until we have enough to fit GP
-Once we have enough, until we see small change in performance, Fit GP to observations, sample from GP fit, find min of sampled GP and add to observations
--> stonks
-
-4)run CMA-ES algorithm
-'''
 
 def execute(env, controller, num_steps_max = 50):
     state = env.reset()

@@ -118,6 +118,7 @@ def run_TS(train_x, train_y, obsInit):
     return optimum_hp, optimum_cost
 
 def CMA_evaluate(hyperparameters):
+    cost = 0
     #Change controller hyperparameters
     hyperparameters = torch.from_numpy(hyperparameters)
 
@@ -129,11 +130,13 @@ def CMA_evaluate(hyperparameters):
     CMA_CONTROLLER.mppi.y_weight = hyperparameters[3]
     CMA_CONTROLLER.mppi.theta_weight = hyperparameters[4]
 
+    for j in range(5):
     #Simulate
-    i, goal_distance, goal_reached = execute(CMA_ENV, CMA_CONTROLLER)
-    
-    #Retrieve cost
-    cost = execution_cost(i, goal_distance, goal_reached)
+        i, goal_distance, goal_reached = execute(CMA_ENV, CMA_CONTROLLER)
+        
+        #Retrieve cost
+        cost += execution_cost(i, goal_distance, goal_reached)
+    cost /=5
     return cost 
 
 
@@ -142,7 +145,7 @@ def run_CMA(obsInit):
     opts = cma.CMAOptions()
     opts.set("bounds", [[0, 0, 0, 0, 0], [None, 0.015, 10., 10., 10.]])
     res = cma.fmin(CMA_evaluate, [0.5, 0.01, 1, 1, 0.1], 1, opts)
-    es = cma.CMAEvolutionStrategy([0.5, 0.01, 1, 1, 0.1], 1).optimize(CMA_evaluate)
+    #es = cma.CMAEvolutionStrategy([0.5, 0.01, 1, 1, 0.1], 1, opts).optimize(CMA_evaluate)
 
 def evalHP(hyperparameters, trials, obsInit):
     env = PandaPushingEnv(visualizer=None, render_non_push_motions=False,  include_obstacle=True,
