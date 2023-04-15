@@ -128,13 +128,14 @@ def CMA_evaluate(hyperparameters):
     #Change controller hyperparameters
     hyperparameters = torch.from_numpy(hyperparameters)
 
-    CMA_CONTROLLER.mppi.noise_sigma = hyperparameters[0]*torch.eye(CMA_ENV.action_space.shape[0])
+    CMA_CONTROLLER.mppi.noise_sigma = hyperparameters*torch.eye(CMA_ENV.action_space.shape[0])
+    # CMA_CONTROLLER.mppi.noise_sigma = hyperparameters[0]*torch.eye(CMA_ENV.action_space.shape[0])
     CMA_CONTROLLER.mppi.noise_sigma_inv = torch.inverse(CMA_CONTROLLER.mppi.noise_sigma)
     CMA_CONTROLLER.mppi.noise_dist = MultivariateNormal(CMA_CONTROLLER.mppi.noise_mu, covariance_matrix=CMA_CONTROLLER.mppi.noise_sigma)
-    CMA_CONTROLLER.mppi.lambda_ = hyperparameters[1]
-    CMA_CONTROLLER.mppi.x_weight = hyperparameters[2]
-    CMA_CONTROLLER.mppi.y_weight = hyperparameters[3]
-    CMA_CONTROLLER.mppi.theta_weight = hyperparameters[4]
+    # CMA_CONTROLLER.mppi.lambda_ = hyperparameters[1]
+    # CMA_CONTROLLER.mppi.x_weight = hyperparameters[2]
+    # CMA_CONTROLLER.mppi.y_weight = hyperparameters[3]
+    # CMA_CONTROLLER.mppi.theta_weight = hyperparameters[4]
 
     for j in range(5):
     #Simulate
@@ -149,8 +150,10 @@ def CMA_evaluate(hyperparameters):
 def run_CMA(obsInit):
     CMA_ENV.obsInit = obsInit
     opts = cma.CMAOptions()
-    opts.set("bounds", [[0, 0, 0, 0, 0], [None, 0.015, 10., 10., 10.]])
-    res = cma.fmin(CMA_evaluate, [0.5, 0.01, 1, 1, 0.1], 1, opts)
+    opts.set("bounds", [0, None])
+    res = cma.fmin(CMA_evaluate, 0.5, 1, opts)
+    # opts.set("bounds", [[0, 0, 0, 0, 0], [None, 0.015, 10., 10., 10.]])
+    # res = cma.fmin(CMA_evaluate, [0.5, 0.01, 1, 1, 0.1], 1, opts)
     #es = cma.CMAEvolutionStrategy([0.5, 0.01, 1, 1, 0.1], 1, opts).optimize(CMA_evaluate)
 
 def evalHP(hyperparameters, trials, obsInit, saveGif = False):
@@ -168,13 +171,14 @@ def evalHP(hyperparameters, trials, obsInit, saveGif = False):
     controller = PushingController(env, pushing_multistep_residual_dynamics_model,
                                 obstacle_avoidance_pushing_cost_function, num_samples=100, horizon=30)
     
-    controller.mppi.noise_sigma = hyperparameters[0]*torch.eye(env.action_space.shape[0])
+    controller.mppi.noise_sigma = hyperparameters*torch.eye(env.action_space.shape[0])
+    # controller.mppi.noise_sigma = hyperparameters[0]*torch.eye(env.action_space.shape[0])
     controller.mppi.noise_sigma_inv = torch.inverse(controller.mppi.noise_sigma)
     controller.mppi.noise_dist = MultivariateNormal(controller.mppi.noise_mu, covariance_matrix=controller.mppi.noise_sigma)
-    controller.mppi.lambda_ = hyperparameters[1]
-    controller.mppi.x_weight = hyperparameters[2]
-    controller.mppi.y_weight = hyperparameters[3]
-    controller.mppi.theta_weight = hyperparameters[4]
+    # controller.mppi.lambda_ = hyperparameters[1]
+    # controller.mppi.x_weight = hyperparameters[2]
+    # controller.mppi.y_weight = hyperparameters[3]
+    # controller.mppi.theta_weight = hyperparameters[4]
 
     # if saveGif:
     #     successRate = 0
@@ -214,28 +218,39 @@ def visualize_gp(model, likelihood, train_x, train_y, constraints):
               'y_weight vs. Cost',
               'theta_weight vs. Cost']
 
-    TEST = torch.ones((50,5))
-    TEST[:, 0] *= 0.5
-    TEST[:, 1] *= 0.01
-    TEST[:, 2] *= 1
-    TEST[:, 3] *= 1
-    TEST[:, 4] *= 0.1
-    for i in range(5):
-        test_x = TEST.clone()
-        test_x[:,i] = torch.linspace(constraints[i, 0], constraints[i,1], 50)
-        with torch.no_grad(), gpytorch.settings.fast_pred_var():
-            observed_pred = likelihood(model(test_x))
-        with torch.no_grad():
-            f, ax = plt.subplots(1, 1, figsize=(4, 3))
-            lower, upper = observed_pred.confidence_region()
-            ax.plot(train_x.numpy()[:,i], train_y.numpy(), 'k*')
-            ax.plot(test_x.numpy()[:,i], observed_pred.mean.numpy(), 'b')
-            ax.fill_between(test_x.numpy()[:,i], lower.numpy(), upper.numpy(), alpha=0.5)
-            ax.set_ylim([30, 70])
-            ax.legend(['Observed Data', 'Mean', 'Confidence'])
-            ax.set_title(titles[i])
+    # TEST = torch.ones((50,5))
+    # TEST[:, 0] *= 0.5
+    # TEST[:, 1] *= 0.01
+    # TEST[:, 2] *= 1
+    # TEST[:, 3] *= 1
+    # TEST[:, 4] *= 0.1
+    # for i in range(5):
+    #     test_x = TEST.clone()
+    #     test_x[:,i] = torch.linspace(constraints[i, 0], constraints[i,1], 50)
+    #     with torch.no_grad(), gpytorch.settings.fast_pred_var():
+    #         observed_pred = likelihood(model(test_x))
+    #     with torch.no_grad():
+    #         f, ax = plt.subplots(1, 1, figsize=(4, 3))
+    #         lower, upper = observed_pred.confidence_region()
+    #         ax.plot(train_x.numpy()[:,i], train_y.numpy(), 'k*')
+    #         ax.plot(test_x.numpy()[:,i], observed_pred.mean.numpy(), 'b')
+    #         ax.fill_between(test_x.numpy()[:,i], lower.numpy(), upper.numpy(), alpha=0.5)
+    #         ax.set_ylim([30, 70])
+    #         ax.legend(['Observed Data', 'Mean', 'Confidence'])
+    #         ax.set_title(titles[i])
 
-
+    test_x = torch.linspace(constraints[0, 0], constraints[0,1], 50)
+    with torch.no_grad(), gpytorch.settings.fast_pred_var():
+        observed_pred = likelihood(model(test_x))
+    with torch.no_grad():
+        f, ax = plt.subplots(1, 1, figsize=(4, 3))
+        lower, upper = observed_pred.confidence_region()
+        ax.plot(train_x.numpy(), train_y.numpy(), 'k*')
+        ax.plot(test_x.numpy(), observed_pred.mean.numpy(), 'b')
+        ax.fill_between(test_x.numpy(), lower.numpy(), upper.numpy(), alpha=0.5)
+        ax.set_ylim([30, 70])
+        ax.legend(['Observed Data', 'Mean', 'Confidence'])
+        ax.set_title(titles[i])
 
 if __name__ == "__main__":
     colData = True
