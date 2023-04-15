@@ -28,17 +28,18 @@ CMA_CONTROLLER = PushingController(CMA_ENV, pushing_multistep_residual_dynamics_
                             obstacle_avoidance_pushing_cost_function, 
                             num_samples=1000, horizon=30)
 
-data_types = ['collected_data_OBS_1.npy',
-            'collected_data_OBS_2.npy',
-            'collected_data_OBS_3.npy']
+# data_types = ['collected_data_OBS_1.npy',
+#             'collected_data_OBS_2.npy',
+#             'collected_data_OBS_3.npy']
 
-GP_models= ['RBF_GP_model_OBS_1.pth',
-            'RBF_GP_model_OBS_2.pth',
-            'RBF_GP_model_OBS_3.pth']
+# GP_models= ['RBF_GP_model_OBS_1.pth',
+#             'RBF_GP_model_OBS_2.pth',
+#             'RBF_GP_model_OBS_3.pth']
 
-TS_results = [['HP_OBS_1.pt', 'cost_OBS_1.pt'],
-              ['HP_OBS_2.pt', 'cost_OBS_2.pt'],
-              ['HP_OBS_3.pt', 'cost_OBS_3.pt']]
+# TS_results = [['HP_OBS_1.pt', 'cost_OBS_1.pt'],
+#               ['HP_OBS_2.pt', 'cost_OBS_2.pt'],
+#               ['HP_OBS_3.pt', 'cost_OBS_3.pt']]
+
 
 def check_env(obsInit, save_gif = False):
     fig = plt.figure(figsize=(8,8))
@@ -56,14 +57,18 @@ def check_env(obsInit, save_gif = False):
     Image(filename=visualizer.get_gif())
     plt.close(fig)
 
-def collect_data(obsInit):
+def collect_data(obsInit, Addendum = None, dataset_size = 300):
     env = PandaPushingEnv(visualizer=None, render_non_push_motions=False,  include_obstacle=True, camera_heigh=800,
                         camera_width=800, render_every_n_steps=5, obsInit = obsInit)
     env.reset()
     controller = PushingController(env, pushing_multistep_residual_dynamics_model,
                             obstacle_avoidance_pushing_cost_function, num_samples=100, horizon=30)
-    collected_data = collect_data_GP(env, controller)
-    filename = "collected_data_OBS_" + str(obsInit) + ".npy"
+    collected_data = collect_data_GP(env, controller, dataset_size = dataset_size)
+    
+    if Addendum is not None:
+        filename = "collected_data_OBS_" + str(obsInit) + "_" + str(Addendum) + ".npy"
+    else:
+        filename = "collected_data_OBS_" + str(obsInit) + ".npy"
     np.save(os.path.join(filename), collected_data)   
 
     return collected_data
@@ -98,12 +103,12 @@ def run_TS(train_x, train_y, obsInit):
     filename = "RBF_GP_model_OBS_" + str(obsInit) + ".pth"
     GP_state_dict = torch.load(filename)
     likelihood = gpytorch.likelihoods.GaussianLikelihood()    
-    constraints = torch.tensor([[0, 10],
-                                [0, 0.015],
-                                [0, 5],
-                                [0, 5],
-                                [0, 5]])
-
+    constraints = torch.tensor([[0.001, 10],
+                                [0.001, 0.015],
+                                [0.001, 5],
+                                [0.001, 5],
+                                [0.001, 5]])
+    
     TS = ThompsonSamplingGP(GP_state_dict, likelihood, constraints, pushing_multistep_residual_dynamics_model, 
                             train_x, train_y, prior = None, obsInit = obsInit)
     optimum_hp, optimum_cost = TS.getOptimalParameters()
@@ -173,6 +178,43 @@ def evalHP(hyperparameters, trials, obsInit):
     print('Sucess Rate: ', successRate)
 
     return successRate
+
+def visualize_gp(model, likelihood, train_x, train_y, constraints):
+    """
+        Generates GP plots for GP defined by model & likelihood
+    """
+    # Get into evaluation (predictive posterior) mode
+    model.eval()
+    likelihood.eval()
+
+    titles = ['noise_sigma vs. Cost',
+              'lambda_val vs. Cost',
+              'x_weight vs. Cost',
+              'y_weight vs. Cost',
+              'theta_weight vs. Cost']
+
+    TEST = torch.ones((50,5))
+    TEST[:, 0] *= 0.5
+    TEST[:, 1] *= 0.01
+    TEST[:, 2] *= 1
+    TEST[:, 3] *= 1
+    TEST[:, 4] *= 0.1
+    for i in range(5):
+        test_x = TEST.clone()
+        test_x[:,i] = torch.linspace(constraints[i, 0], constraints[i,1], 50)
+        with torch.no_grad(), gpytorch.settings.fast_pred_var():
+            observed_pred = likelihood(model(test_x))
+        with torch.no_grad():
+            f, ax = plt.subplots(1, 1, figsize=(4, 3))
+            lower, upper = observed_pred.confidence_region()
+            ax.plot(train_x.numpy()[:,i], train_y.numpy(), 'k*')
+            ax.plot(test_x.numpy()[:,i], observed_pred.mean.numpy(), 'b')
+            ax.fill_between(test_x.numpy()[:,i], lower.numpy(), upper.numpy(), alpha=0.5)
+            ax.set_ylim([30, 70])
+            ax.legend(['Observed Data', 'Mean', 'Confidence'])
+            ax.set_title(titles[i])
+
+
 
 if __name__ == "__main__":
     colData = True

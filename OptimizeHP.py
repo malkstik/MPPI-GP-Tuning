@@ -93,7 +93,7 @@ class RBF_GP(gpytorch.models.ExactGP):
         return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
     
     def predict(self, x):
-        with torch.no_grad():
+        with torch.no_grad(), gpytorch.settings.fast_pred_var():
             pred = self.likelihood(self.forward(x))
         pred_mu = pred.mean
         pred_sigma = pred.stddev#torch.diag_embed(pred.stddev ** 2)
@@ -190,18 +190,19 @@ class ThompsonSamplingGP:
         #Change controller hyperparameters
         self.controller.mppi.noise_sigma = sample[0]*torch.eye(self.env.action_space.shape[0])
         self.controller.mppi.noise_sigma_inv = torch.inverse(self.controller.mppi.noise_sigma)
-        self.controller.mppi.noise_dist = MultivariateNormal(self.controller.mppi.noise_mu, covariance_matrix=torch.from_numpy(self.mppi.controller.noise_sigma))
+        self.controller.mppi.noise_dist = MultivariateNormal(self.controller.mppi.noise_mu, covariance_matrix=self.controller.mppi.noise_sigma)
         self.controller.mppi.lambda_ = sample[1]
         self.controller.mppi.x_weight = sample[2]
         self.controller.mppi.y_weight = sample[3]
         self.controller.mppi.theta_weight = sample[4]
 
         #Simulate
-        state_0 = self.env.reset()
-        i, goal_distance, goal_reached = execute(self.env, self.controller, state_0)
-        
-        #Retrieve cost
-        cost = execution_cost(i, goal_distance, goal_reached)
+        cost = 0
+        for j in range(5):
+            i, goal_distance, goal_reached = execute(self.env, self.controller)
+            #Retrieve cost
+            cost += execution_cost(i, goal_distance, goal_reached)
+        cost /= 5
         return cost 
 
     # process of choosing next point
