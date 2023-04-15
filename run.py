@@ -26,7 +26,7 @@ state_0 = CMA_ENV.reset()
 state = state_0
 CMA_CONTROLLER = PushingController(CMA_ENV, pushing_multistep_residual_dynamics_model,
                             obstacle_avoidance_pushing_cost_function, 
-                            num_samples=1000, horizon=30)
+                            num_samples=100, horizon=30)
 
 # data_types = ['collected_data_OBS_1.npy',
 #             'collected_data_OBS_2.npy',
@@ -41,13 +41,14 @@ CMA_CONTROLLER = PushingController(CMA_ENV, pushing_multistep_residual_dynamics_
 #               ['HP_OBS_3.pt', 'cost_OBS_3.pt']]
 
 
-def check_env(obsInit, save_gif = False):
+def check_env(obsInit, hyperparameters, save_gif = False):
     fig = plt.figure(figsize=(8,8))
     visualizer = GIFVisualizer()
     # Initialize the simulation environment
     env = PandaPushingEnv(visualizer=visualizer, render_non_push_motions=False,  include_obstacle=True,
                         camera_heigh=800, camera_width=800, render_every_n_steps=5, obsInit = obsInit)
     env.reset()
+    
     # Perform 1 random action:
     for i in tqdm(range(1)):
         action_i = env.action_space.sample()
@@ -115,8 +116,8 @@ def run_TS(train_x, train_y, obsInit):
 
     TS_HP = TS.X
     TS_cost = TS.y
-    HP_filename = "HP_OBS_" + obsInit + "1.pt"
-    cost_filename = "cost_OBS_" + obsInit + "1.pt"
+    HP_filename = "HP_OBS_" + str(obsInit) + ".pt"
+    cost_filename = "cost_OBS_" + str(obsInit) + ".pt"
     torch.save(TS_HP, os.path.join(HP_filename))
     torch.save(TS_cost, os.path.join(cost_filename))
 
@@ -152,13 +153,20 @@ def run_CMA(obsInit):
     res = cma.fmin(CMA_evaluate, [0.5, 0.01, 1, 1, 0.1], 1, opts)
     #es = cma.CMAEvolutionStrategy([0.5, 0.01, 1, 1, 0.1], 1, opts).optimize(CMA_evaluate)
 
-def evalHP(hyperparameters, trials, obsInit):
-    env = PandaPushingEnv(visualizer=None, render_non_push_motions=False,  include_obstacle=True,
+def evalHP(hyperparameters, trials, obsInit, saveGif = False):
+
+    if saveGif:
+        fig = plt.figure(figsize=(8,8))
+        visualizer = GIFVisualizer()
+        env = PandaPushingEnv(visualizer=visualizer, render_non_push_motions=False,  include_obstacle=True,
                         camera_heigh=800, camera_width=800, render_every_n_steps=5, obsInit=obsInit)
+    else:
+        env = PandaPushingEnv(visualizer=None, render_non_push_motions=False,  include_obstacle=True,
+                camera_heigh=800, camera_width=800, render_every_n_steps=5, obsInit=obsInit)
     state_0 = env.reset()
     state = state_0
     controller = PushingController(env, pushing_multistep_residual_dynamics_model,
-                                obstacle_avoidance_pushing_cost_function, num_samples=1000, horizon=30)
+                                obstacle_avoidance_pushing_cost_function, num_samples=100, horizon=30)
     
     controller.mppi.noise_sigma = hyperparameters[0]*torch.eye(env.action_space.shape[0])
     controller.mppi.noise_sigma_inv = torch.inverse(controller.mppi.noise_sigma)
@@ -167,12 +175,25 @@ def evalHP(hyperparameters, trials, obsInit):
     controller.mppi.x_weight = hyperparameters[2]
     controller.mppi.y_weight = hyperparameters[3]
     controller.mppi.theta_weight = hyperparameters[4]
+
+    # if saveGif:
+    #     successRate = 0
+    #     _, _, goal_reached = execute(env, controller)
+    #     if goal_reached:
+    #         successRate = 1
+    #     Image(filename=visualizer.get_gif())
+    #     plt.close(fig)
+    # else:
     pbar = tqdm(range(trials))
     success = 0
     for i in pbar:
         _, _, goal_reached = execute(env, controller)
         if goal_reached:
             success += 1
+            if saveGif:
+                Image(filename=visualizer.get_gif())
+                plt.close(fig)
+                break
         pbar.set_description(f'Succeses: {success:.0f} | Total: {i+1:.0f}')
     successRate = success/trials
     print('Sucess Rate: ', successRate)
