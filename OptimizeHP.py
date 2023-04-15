@@ -27,6 +27,7 @@ def execution_cost(i, goal_distance, goal_reached):
     cost = i + 10*goal_distance 
     if not goal_reached:
         cost += 30
+    #cost = goal_distance**2
     return cost
 
 def collect_data_GP(env, controller, dataset_size = 300):
@@ -38,30 +39,35 @@ def collect_data_GP(env, controller, dataset_size = 300):
         pbar.set_description(f'Iteration: {i:.0f}')
         state_0 = env.reset()
         data = {}
-        data['hyperparameters'] = torch.zeros(5, dtype = torch.float32) #noise_sigma, lambda_value, x, y, theta
+        # data['hyperparameters'] = torch.zeros(5, dtype = torch.float32) #noise_sigma, lambda_value, x, y, theta
         data['cost'] = 0
         # Randomly Sample Hyperparameter values
-        data['hyperparameters'][0] = np.random.uniform(0, 10)
-        data['hyperparameters'][1] = np.random.uniform(0, 0.015)
-        data['hyperparameters'][2] = np.random.uniform(0, 10)
-        data['hyperparameters'][3] = np.random.uniform(0, 10)
-        data['hyperparameters'][4] = np.random.uniform(0, 10)
+        data['hyperparameters'] = np.random.uniform(0, 10)
+        # data['hyperparameters'][0] = np.random.uniform(0, 10)
+        # data['hyperparameters'][1] = np.random.uniform(0, 0.015)
+        # data['hyperparameters'][2] = np.random.uniform(0, 10)
+        # data['hyperparameters'][3] = np.random.uniform(0, 10)
+        # data['hyperparameters'][4] = np.random.uniform(0, 10)
+
+        # a = np.array([0, 0, 0, 0])
+        # b = np.array([10, 10, 10, 10])
+        # data['hyperparameters'] = np.random.uniform(a, b)
 
         #Should we also consider changing horizon?
         # Simulate using these hyperparameters
-        controller.mppi.noise_sigma = data['hyperparameters'][0]*torch.eye(env.action_space.shape[0])
+        controller.mppi.noise_sigma = data['hyperparameters']*torch.eye(env.action_space.shape[0])
         controller.mppi.noise_sigma_inv = torch.inverse(controller.mppi.noise_sigma)        
         controller.mppi.noise_dist = MultivariateNormal(controller.mppi.noise_mu, covariance_matrix= controller.mppi.noise_sigma)
-        controller.mppi.lambda_ = data['hyperparameters'][1]
-        controller.mppi.x_weight = data['hyperparameters'][2]
-        controller.mppi.y_weight = data['hyperparameters'][3]
-        controller.mppi.theta_weight = data['hyperparameters'][4]
+        # controller.mppi.lambda_ = data['hyperparameters'][1]
+        # controller.mppi.x_weight = data['hyperparameters'][2]
+        # controller.mppi.y_weight = data['hyperparameters'][3]
+        # controller.mppi.theta_weight = data['hyperparameters'][4]
         # Add cost to data
         cost = 0
-        for i in range(5):
-            steps, goal_distance, goal_reached = execute(env, controller)
-            cost += execution_cost(steps, goal_distance, goal_reached)
-        data['cost'] = cost/5
+        # for i in range(5):
+        steps, goal_distance, goal_reached = execute(env, controller)
+        cost += execution_cost(steps, goal_distance, goal_reached)
+        # data['cost'] = cost/5
         collected_data.append(data)
     #   
 
@@ -77,7 +83,7 @@ class RBF_GP(gpytorch.models.ExactGP):
         # --- Your code here
         self.mean_module = gpytorch.means.ConstantMean()
         self.covar_module = gpytorch.kernels.ScaleKernel(
-            gpytorch.kernels.RBFKernel(ard_nums_dims = 5)
+            gpytorch.kernels.RBFKernel(ard_nums_dims = 1)
         )
         # ---
     def forward(self, x):
@@ -149,9 +155,10 @@ class ThompsonSamplingGP:
         # we also define the x grid
         self.interval_resolution = interval_resolution
 
-        self.vals = torch.tensor([.5, .01, 1, 1, 0.1]).to(torch.device(device))
-        self.X_grid = self.vals.clone().repeat((interval_resolution,1)).to(torch.device(device))
-        self.hp_focus = 0
+        # self.vals = torch.tensor([.5, .01, 1, 1, 0.1]).to(torch.device(device))
+        # self.X_grid = self.vals.clone().repeat((interval_resolution,1)).to(torch.device(device))
+        self.X_grid = torch.linspace(constraints[0,0], constraints[0,1])
+        # self.hp_focus = 0
 
         # for i in range(5):
         #     # self.X_grid[:,i] = torch.linspace(self.constraints[i, 0], self.constraints[i, 1], self.interval_resolution)
@@ -204,9 +211,9 @@ class ThompsonSamplingGP:
         self.controller.mppi.noise_sigma_inv = torch.inverse(self.controller.mppi.noise_sigma)
         self.controller.mppi.noise_dist = MultivariateNormal(self.controller.mppi.noise_mu, covariance_matrix=self.controller.mppi.noise_sigma)
         # self.controller.mppi.lambda_ = sample[1]
-        self.controller.mppi.x_weight = sample[2]
-        self.controller.mppi.y_weight = sample[3]
-        self.controller.mppi.theta_weight = sample[4]
+        # self.controller.mppi.x_weight = sample[2]
+        # self.controller.mppi.y_weight = sample[3]
+        # self.controller.mppi.theta_weight = sample[4]
 
         #Simulate
         i, goal_distance, goal_reached = execute(self.env, self.controller)
@@ -231,7 +238,7 @@ class ThompsonSamplingGP:
         else:
             # 1. Fit the GP and draw one sample (a function) from the posterior
             gp_model = self.fit(self.X, self.y)
-            self.make_grid() #Cycles through hyperparameter of interest, reduce problem to 1D at any one given time
+            #self.make_grid() #Cycles through hyperparameter of interest, reduce problem to 1D at any one given time
             posterior_mean, posterior_std = gp_model.predict(self.X_grid)
             posterior_sample = posterior_mean + posterior_std*torch.randn_like(posterior_mean)
 
