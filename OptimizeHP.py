@@ -136,7 +136,7 @@ def train_gp_hyperparams(model, likelihood, hyperparameters, cost, lr = 0.1, mut
 class ThompsonSamplingGP:
     
     def __init__(self, state_dict, likelihood, constraints, dynamics_model, train_x, train_y,
-                prior = None, n_random_draws = 5, interval_resolution=1000, device = 'cpu', obsInit = 0):
+                prior = None, n_random_draws = 5, interval_resolution=500, device = 'cpu', obsInit = 0):
                 
         # number of random samples before starting the optimization
         self.n_random_draws = n_random_draws 
@@ -148,10 +148,15 @@ class ThompsonSamplingGP:
         # represent the posterior sample
         # we also define the x grid
         self.interval_resolution = interval_resolution
-        self.X_grid = torch.zeros((self.interval_resolution, 5)).to(torch.device(device))
-        for i in range(5):
-            self.X_grid[:,i] = torch.linspace(self.constraints[i, 0], self.constraints[i, 1], self.interval_resolution)
-        
+
+        self.vals = torch.tensor([.5, .01, 1, 1, 0.1]).to(torch.device(device))
+        self.X_grid = self.vals.clone().repeat((interval_resolution,1)).to(torch.device(device))
+        self.hp_focus = 0
+
+        # for i in range(5):
+        #     # self.X_grid[:,i] = torch.linspace(self.constraints[i, 0], self.constraints[i, 1], self.interval_resolution)
+        #     self.X_grid[:,i] *= default[i]
+
         # also initializing our design matrix and target variable
         if prior is not None:
           self.X = prior[0]
@@ -180,10 +185,17 @@ class ThompsonSamplingGP:
         self.train_x = train_x
         self.train_y = train_y
 
+
     def fit(self, X, y):
-        gp_model = RBF_GP(X, y, self.likelihood)
-        gp_model.load_state_dict(self.state_dict)
-        gp_model.eval()
+        if (self.n+1)%3 == 0:
+            retrain_HP = torch.vstack((self.train_x, self.X))
+            retrain_cost = torch.hstack((self.train_y, self.y.squeeze()))
+            gp_model = RBF_GP(retrain_HP, retrain_cost, self.likelihood)
+            self.refineGP(gp_model, self.likelihood, retrain_HP, retrain_cost)
+        else:
+            gp_model = RBF_GP(X, y, self.likelihood)
+            gp_model.load_state_dict(self.state_dict)
+            gp_model.eval()
         return gp_model
 
     def evaluate(self, sample):
@@ -191,18 +203,21 @@ class ThompsonSamplingGP:
         self.controller.mppi.noise_sigma = sample[0]*torch.eye(self.env.action_space.shape[0])
         self.controller.mppi.noise_sigma_inv = torch.inverse(self.controller.mppi.noise_sigma)
         self.controller.mppi.noise_dist = MultivariateNormal(self.controller.mppi.noise_mu, covariance_matrix=self.controller.mppi.noise_sigma)
-        self.controller.mppi.lambda_ = sample[1]
+        # self.controller.mppi.lambda_ = sample[1]
         self.controller.mppi.x_weight = sample[2]
         self.controller.mppi.y_weight = sample[3]
         self.controller.mppi.theta_weight = sample[4]
 
         #Simulate
-        cost = 0
-        for j in range(5):
-            i, goal_distance, goal_reached = execute(self.env, self.controller)
-            #Retrieve cost
-            cost += execution_cost(i, goal_distance, goal_reached)
-        cost /= 5
+        i, goal_distance, goal_reached = execute(self.env, self.controller)
+        cost = execution_cost(i, goal_distance, goal_reached)
+        #Averaging performs well but is too computationally expensive
+        # cost = 0
+        # for j in range(5):
+        #     i, goal_distance, goal_reached = execute(self.env, self.controller)
+        #     #Retrieve cost
+        #     cost += execution_cost(i, goal_distance, goal_reached)
+        # cost /= 5
         return cost 
 
     # process of choosing next point
@@ -216,7 +231,7 @@ class ThompsonSamplingGP:
         else:
             # 1. Fit the GP and draw one sample (a function) from the posterior
             gp_model = self.fit(self.X, self.y)
-            
+            self.make_grid() #Cycles through hyperparameter of interest, reduce problem to 1D at any one given time
             posterior_mean, posterior_std = gp_model.predict(self.X_grid)
             posterior_sample = posterior_mean + posterior_std*torch.randn_like(posterior_mean)
 
@@ -225,6 +240,7 @@ class ThompsonSamplingGP:
             # 2. Choose next point as the optimum of the sample
             which_min = torch.argmin(posterior_sample)
             next_sample = self.X_grid[which_min, :]
+            self.vals = next_sample.clone()
         
         # let us observe the objective and append this new data to our X and y
         next_observation = torch.tensor(self.evaluate(next_sample))
@@ -236,14 +252,27 @@ class ThompsonSamplingGP:
             self.X = torch.vstack((self.X, next_sample))
             self.y = torch.vstack((self.y, next_observation))
       
-    def getOptimalParameters(self, iter = 500):
+    def getOptimalParameters(self, iter = 300):
         pbar = tqdm(range(iter))
         for self.n in pbar:
             self.choose_next_sample()
         bestIdx = torch.argmin(self.y)
         return self.X[bestIdx], self.y[bestIdx]
     
-    def refineGP(self, model, likelihood,retrain_HP, retrain_cost):
+    def refineGP(self, model, likelihood, retrain_HP, retrain_cost):
         train_gp_hyperparams(model, likelihood, retrain_HP, retrain_cost, mute=True)
         self.state_dict = model.state_dict()
 
+    def make_grid(self):
+        thisgrid = self.vals.clone()
+        self.X_grid = self.vals.clone().repeat((self.interval_resolution,1)).to(torch.device(self.device))
+        hp = self.hp_focus%5
+        if hp in [0, 2, 3, 4]:
+            self.X_grid[:, hp] = torch.linspace(self.constraints[hp,0], self.constraints[hp,1], self.interval_resolution)
+            if self.n%5 == 0:
+                self.hp_focus += 1
+        # Skipping lambda_val since it doesnt do anything
+        else:
+            self.X_grid[:, 2] = torch.linspace(self.constraints[2,0], self.constraints[2,1], self.interval_resolution)
+            if self.n%5 == 0:
+                self.hp_focus += 2
