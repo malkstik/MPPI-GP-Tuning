@@ -9,7 +9,7 @@ import cma
 
 #GAME PLAN
 
-def execute(env, controller, num_steps_max = 50):
+def execute(env, controller, num_steps_max = 30):
     state = env.reset()
     for i in range(num_steps_max):
         action = controller.control(state)
@@ -29,7 +29,7 @@ def execution_cost(i, goal_distance, goal_reached):
         cost += 30
     return cost
 
-def collect_data_GP(env, controller, dataset_size = 500):
+def collect_data_GP(env, controller, dataset_size = 300):
     # --- Your code here
     collected_data = []
     pbar = tqdm(range(dataset_size))
@@ -56,10 +56,10 @@ def collect_data_GP(env, controller, dataset_size = 500):
         controller.mppi.x_weight = data['hyperparameters'][2]
         controller.mppi.y_weight = data['hyperparameters'][3]
         controller.mppi.theta_weight = data['hyperparameters'][4]
-        steps, goal_distance, goal_reached = execute(env, controller)
         # Add cost to data
         cost = 0
         for i in range(5):
+            steps, goal_distance, goal_reached = execute(env, controller)
             cost += execution_cost(steps, goal_distance, goal_reached)
         data['cost'] = cost/5
         collected_data.append(data)
@@ -171,7 +171,7 @@ class ThompsonSamplingGP:
                                     camera_heigh=800, camera_width=800, render_every_n_steps=20, obsInit = obsInit)
         self.env.reset()
         self.controller = PushingController(self.env, dynamics_model,
-                        obstacle_avoidance_pushing_cost_function, num_samples=1000, horizon=30)
+                        obstacle_avoidance_pushing_cost_function, num_samples=100, horizon=30)
 
         # device to run on
         self.device = device

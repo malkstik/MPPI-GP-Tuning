@@ -40,12 +40,12 @@ TS_results = [['HP_OBS_1.pt', 'cost_OBS_1.pt'],
               ['HP_OBS_2.pt', 'cost_OBS_2.pt'],
               ['HP_OBS_3.pt', 'cost_OBS_3.pt']]
 
-def check_env(save_gif = False):
+def check_env(obsInit, save_gif = False):
     fig = plt.figure(figsize=(8,8))
     visualizer = GIFVisualizer()
     # Initialize the simulation environment
     env = PandaPushingEnv(visualizer=visualizer, render_non_push_motions=False,  include_obstacle=True,
-                        camera_heigh=800, camera_width=800, render_every_n_steps=5, obsInit = OBS_INIT)
+                        camera_heigh=800, camera_width=800, render_every_n_steps=5, obsInit = obsInit)
     env.reset()
     # Perform 1 random action:
     for i in tqdm(range(1)):
@@ -61,7 +61,7 @@ def collect_data(obsInit):
                         camera_width=800, render_every_n_steps=5, obsInit = obsInit)
     env.reset()
     controller = PushingController(env, pushing_multistep_residual_dynamics_model,
-                            obstacle_avoidance_pushing_cost_function, num_samples=1000, horizon=30)
+                            obstacle_avoidance_pushing_cost_function, num_samples=100, horizon=30)
     collected_data = collect_data_GP(env, controller)
     filename = "collected_data_OBS_" + str(obsInit) + ".npy"
     np.save(os.path.join(filename), collected_data)   
