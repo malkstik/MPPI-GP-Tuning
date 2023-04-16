@@ -240,17 +240,20 @@ def visualize_gp(model, likelihood, train_x, train_y, constraints):
     #         ax.set_title(titles[i])
 
     test_x = torch.linspace(constraints[0, 0], constraints[0,1], 50)
+    print(train_x.shape)
+    print(train_y.shape)
+    print(test_x.shape)
     with torch.no_grad(), gpytorch.settings.fast_pred_var():
         observed_pred = likelihood(model(test_x))
-    with torch.no_grad():
+        print(observed_pred.mean.shape)
+        print(observed_pred.stddev.shape)
         f, ax = plt.subplots(1, 1, figsize=(4, 3))
         lower, upper = observed_pred.confidence_region()
         ax.plot(train_x.numpy(), train_y.numpy(), 'k*')
         ax.plot(test_x.numpy(), observed_pred.mean.numpy(), 'b')
         ax.fill_between(test_x.numpy(), lower.numpy(), upper.numpy(), alpha=0.5)
-        ax.set_ylim([30, 70])
         ax.legend(['Observed Data', 'Mean', 'Confidence'])
-        ax.set_title(titles[i])
+        ax.set_title(titles[0])
 
 if __name__ == "__main__":
     colData = True

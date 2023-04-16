@@ -24,10 +24,10 @@ def execute(env, controller, num_steps_max = 30):
 
 def execution_cost(i, goal_distance, goal_reached):
     # A far distance is 0.4, A pass can get something like .06
-    cost = i + 10*goal_distance 
-    if not goal_reached:
-        cost += 30
-    #cost = goal_distance**2
+    # cost = i + 10*goal_distance 
+    # if not goal_reached:
+    #     cost += 30
+    cost = goal_distance**2
     return cost
 
 def collect_data_GP(env, controller, dataset_size = 300):
@@ -67,7 +67,7 @@ def collect_data_GP(env, controller, dataset_size = 300):
         # for i in range(5):
         steps, goal_distance, goal_reached = execute(env, controller)
         cost += execution_cost(steps, goal_distance, goal_reached)
-        # data['cost'] = cost/5
+        data['cost'] = cost
         collected_data.append(data)
     #   
 
@@ -98,10 +98,14 @@ class RBF_GP(gpytorch.models.ExactGP):
         covar_x = self.covar_module(x)
         return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
     
-    def predict(self, x):
+    def predict(self, x):        
         with torch.no_grad(), gpytorch.settings.fast_pred_var():
             pred = self.likelihood(self.forward(x))
         pred_mu = pred.mean
+        print(x.shape)
+        print(pred.mean.shape)
+        # upper, _ = pred.confidence_region()
+        # pred_sigma = (upper - pred)/2
         pred_sigma = pred.stddev#torch.diag_embed(pred.stddev ** 2)
 
         return pred_mu, pred_sigma
@@ -157,7 +161,7 @@ class ThompsonSamplingGP:
 
         # self.vals = torch.tensor([.5, .01, 1, 1, 0.1]).to(torch.device(device))
         # self.X_grid = self.vals.clone().repeat((interval_resolution,1)).to(torch.device(device))
-        self.X_grid = torch.linspace(constraints[0,0], constraints[0,1])
+        self.X_grid = torch.linspace(constraints[0,0], constraints[0,1], self.interval_resolution).type(torch.float64)
         # self.hp_focus = 0
 
         # for i in range(5):
@@ -166,13 +170,14 @@ class ThompsonSamplingGP:
 
         # also initializing our design matrix and target variable
         if prior is not None:
-          self.X = prior[0]
-          self.y = prior[1]
-          self.first = False
+            self.X = prior[0].type(torch.float64)
+            self.y = prior[1].type(torch.float64)
+            self.first = False
+            print('prior is not none')
         else:
-          self.first = True
-          self.X = torch.tensor([]).to(torch.device(device)); self.y = torch.tensor([]).to(torch.device(device))
-        
+            self.first = True
+            self.X = torch.tensor([]).to(torch.device(device)).type(torch.float64); self.y = torch.tensor([]).to(torch.device(device)).type(torch.float64)
+            print('prior is none')
         # parameters for fitting a GP
         self.state_dict = state_dict
         self.likelihood = likelihood
@@ -194,9 +199,10 @@ class ThompsonSamplingGP:
 
 
     def fit(self, X, y):
+        # print(X.shape, y.shape)
         if (self.n+1)%3 == 0:
-            retrain_HP = torch.vstack((self.train_x, self.X))
-            retrain_cost = torch.hstack((self.train_y, self.y.squeeze()))
+            retrain_HP = torch.hstack((self.train_x, X)).type(torch.float64)
+            retrain_cost = torch.hstack((self.train_y, y)).type(torch.float64)
             gp_model = RBF_GP(retrain_HP, retrain_cost, self.likelihood)
             self.refineGP(gp_model, self.likelihood, retrain_HP, retrain_cost)
         else:
@@ -207,7 +213,7 @@ class ThompsonSamplingGP:
 
     def evaluate(self, sample):
         #Change controller hyperparameters
-        self.controller.mppi.noise_sigma = sample[0]*torch.eye(self.env.action_space.shape[0])
+        self.controller.mppi.noise_sigma = sample*torch.eye(self.env.action_space.shape[0])
         self.controller.mppi.noise_sigma_inv = torch.inverse(self.controller.mppi.noise_sigma)
         self.controller.mppi.noise_dist = MultivariateNormal(self.controller.mppi.noise_mu, covariance_matrix=self.controller.mppi.noise_sigma)
         # self.controller.mppi.lambda_ = sample[1]
@@ -231,35 +237,51 @@ class ThompsonSamplingGP:
     def choose_next_sample(self):
         # if we do not have enough samples, sample randomly from bounds
         if self.X.shape[0] < self.n_random_draws:
-            next_sample = np.random.uniform(self.constraints[:,0], self.constraints[:,1])
-            next_sample = torch.from_numpy(next_sample).to(torch.device(self.device))
+            # next_sample = np.random.uniform(self.constraints[:,0], self.constraints[:,1])
+            next_sample = np.random.uniform(self.constraints[0,0], self.constraints[0,1])
+
+            # next_sample = torch.from_numpy(next_sample).to(torch.device(self.device))
+            next_sample = torch.tensor([next_sample]).to(torch.device(self.device))
 
         # if we do, we fit the GP and choose the next point based on the posterior draw minimum
         else:
             # 1. Fit the GP and draw one sample (a function) from the posterior
+            # print(self.X.shape)
+            # print(self.y.shape)
+            # print(self.X.dtype)
+            # print(self.y.dtype)
+            # print(self.X_grid.dtype)
             gp_model = self.fit(self.X, self.y)
             #self.make_grid() #Cycles through hyperparameter of interest, reduce problem to 1D at any one given time
-            posterior_mean, posterior_std = gp_model.predict(self.X_grid)
+            # posterior_mean, posterior_std = gp_model.predict(self.X_grid)
+            with torch.no_grad(), gpytorch.settings.fast_pred_var():
+                observed_pred = self.likelihood(gp_model(self.X_grid))
+                posterior_mean = observed_pred.mean
+                posterior_mean.shape
+                posterior_std =  observed_pred.stddev
             posterior_sample = posterior_mean + posterior_std*torch.randn_like(posterior_mean)
 
             posterior_sample = posterior_sample.to(torch.device(self.device))
 
             # 2. Choose next point as the optimum of the sample
             which_min = torch.argmin(posterior_sample)
-            next_sample = self.X_grid[which_min, :]
+            # next_sample = self.X_grid[which_min, :]
+            next_sample = self.X_grid[which_min]
             self.vals = next_sample.clone()
         
         # let us observe the objective and append this new data to our X and y
         next_observation = torch.tensor(self.evaluate(next_sample))
         if self.first:
-            self.X = next_sample
-            self.y = next_observation
+            self.X = next_sample.type(torch.float64)
+            self.y = next_observation.type(torch.float64)
             self.first = False
+            # print('first')
         else:
-            self.X = torch.vstack((self.X, next_sample))
-            self.y = torch.vstack((self.y, next_observation))
+            self.X = torch.hstack((self.X, next_sample))
+            self.y = torch.hstack((self.y, next_observation))
+            # print('not first')
       
-    def getOptimalParameters(self, iter = 300):
+    def getOptimalParameters(self, iter = 100):
         pbar = tqdm(range(iter))
         for self.n in pbar:
             self.choose_next_sample()
